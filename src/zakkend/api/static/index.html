@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Zakkend Nederland — Foundation Subsidence Risk</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #121a33;
+    --ink: #e6eaf5;
+    --muted: #8a93ad;
+    --accent: #ff7a59;
+    --low: #2ecc71;
+    --moderate: #f1c40f;
+    --high: #e67e22;
+    --critical: #e74c3c;
+    --border: #223056;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+  .layout { display: grid; grid-template-columns: 420px 1fr; height: 100vh; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } }
+  aside { background: var(--panel); padding: 20px; overflow-y: auto; border-right: 1px solid var(--border); }
+  h1 { font-size: 18px; margin: 0 0 4px 0; letter-spacing: .3px; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 12px; margin: 0 0 12px; }
+  legend { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; padding: 0 4px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+  input, select { width: 100%; background: #0b1428; color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; font-size: 13px; }
+  button {
+    width: 100%; background: var(--accent); color: #0b1020; font-weight: 700;
+    border: 0; padding: 12px; border-radius: 8px; cursor: pointer; font-size: 14px;
+    margin-top: 4px;
+  }
+  button:hover { filter: brightness(1.08); }
+  #results { margin-top: 16px; }
+  .result-card { background: #0b1428; border-radius: 8px; padding: 16px; border: 1px solid var(--border); }
+  .score { font-size: 48px; font-weight: 800; line-height: 1; margin: 4px 0; }
+  .class-badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+  .class-low { background: var(--low); color: #0b1020; }
+  .class-moderate { background: var(--moderate); color: #0b1020; }
+  .class-high { background: var(--high); color: #0b1020; }
+  .class-critical { background: var(--critical); color: #fff; }
+  .driver { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .driver:last-child { border: 0; }
+  .driver .name { color: var(--ink); }
+  .driver .val { color: var(--muted); font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .driver .dir.up { color: var(--critical); }
+  .driver .dir.down { color: var(--low); }
+  #map { height: 100%; }
+  .footer { color: var(--muted); font-size: 11px; margin-top: 16px; line-height: 1.5; }
+  .footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <h1>Zakkend <span>Nederland</span></h1>
+    <div class="sub">Foundation subsidence risk for Dutch homes · Phase 1 MVP</div>
+
+    <fieldset>
+      <legend>Building</legend>
+      <div class="row">
+        <div><label>Year built</label><input id="year_built" type="number" value="1925" /></div>
+        <div><label>Foundation</label>
+          <select id="foundation_type">
+            <option>wooden_pile</option><option>concrete_pile</option>
+            <option>strip</option><option>slab</option>
+          </select>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Soil &amp; hydrology</legend>
+      <div class="row">
+        <div><label>Soil type</label>
+          <select id="soil_type">
+            <option>peat</option><option>clay</option>
+            <option>sandy_clay</option><option>sand</option><option>loess</option>
+          </select>
+        </div>
+        <div><label>Peat thickness (m)</label><input id="peat_thickness_m" type="number" step="0.1" value="2.5" /></div>
+      </div>
+      <div class="row">
+        <div><label>Groundwater depth (m)</label><input id="groundwater_depth_m" type="number" step="0.1" value="1.1" /></div>
+        <div><label>GW variability (0–1)</label><input id="groundwater_variability" type="number" step="0.05" value="0.45" /></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Remote sensing &amp; climate</legend>
+      <div class="row">
+        <div><label>InSAR (mm/yr)</label><input id="insar_deformation_mm_yr" type="number" step="0.1" value="3.2" /></div>
+        <div><label>Drought (0–1)</label><input id="drought_exposure_index" type="number" step="0.05" value="0.55" /></div>
+      </div>
+      <div class="row">
+        <div><label>Dist. to water (m)</label><input id="distance_to_water_m" type="number" value="120" /></div>
+        <div><label>Neighborhood rate</label><input id="neighborhood_damage_rate" type="number" step="0.01" value="0.18" /></div>
+      </div>
+    </fieldset>
+
+    <button onclick="run()">🔎 Assess risk</button>
+
+    <div id="results"></div>
+
+    <div class="footer">
+      Model: XGBoost + SHAP · Phase 1 uses synthetic data encoding Dutch subsidence dynamics
+      · <a href="https://github.com/prakharprakarsh/zakkend-nederland" target="_blank">GitHub</a>
+    </div>
+  </aside>
+
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const map = L.map('map').setView([52.1, 5.3], 7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+
+  let marker = null;
+  map.on('click', (e) => {
+    if (marker) marker.remove();
+    marker = L.marker(e.latlng).addTo(map);
+  });
+
+  function collect() {
+    const yb = +document.getElementById('year_built').value;
+    return {
+      year_built: yb,
+      building_age: 2026 - yb,
+      foundation_type: document.getElementById('foundation_type').value,
+      soil_type: document.getElementById('soil_type').value,
+      peat_thickness_m: +document.getElementById('peat_thickness_m').value,
+      groundwater_depth_m: +document.getElementById('groundwater_depth_m').value,
+      groundwater_variability: +document.getElementById('groundwater_variability').value,
+      insar_deformation_mm_yr: +document.getElementById('insar_deformation_mm_yr').value,
+      drought_exposure_index: +document.getElementById('drought_exposure_index').value,
+      distance_to_water_m: +document.getElementById('distance_to_water_m').value,
+      neighborhood_damage_rate: +document.getElementById('neighborhood_damage_rate').value
+    };
+  }
+
+  async function run() {
+    const payload = collect();
+    const r = await fetch('/explain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) { alert('API error: ' + r.status); return; }
+    render(await r.json());
+  }
+
+  function render(out) {
+    const pct = Math.round(out.risk_score * 100);
+    const cls = out.predicted_class;
+    const drivers = out.top_drivers.map(d => `
+      <div class="driver">
+        <span class="name">${d.feature}</span>
+        <span class="val">${d.value}</span>
+        <span class="dir ${d.shap_value > 0 ? 'up' : 'down'}">${d.direction} (${d.shap_value.toFixed(3)})</span>
+      </div>`).join('');
+    document.getElementById('results').innerHTML = `
+      <div class="result-card">
+        <span class="class-badge class-${cls}">${cls}</span>
+        <div class="score">${pct}<span style="font-size:18px;color:var(--muted)">/100</span></div>
+        <div style="color:var(--muted);font-size:12px;margin-bottom:12px">
+          Predicted risk class · base value ${out.base_value.toFixed(2)}
+        </div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:4px">
+          Top drivers (SHAP)
+        </div>
+        ${drivers}
+      </div>`;
+  }
+</script>
+</body>
+</html>

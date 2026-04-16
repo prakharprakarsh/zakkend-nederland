@@ -1,0 +1,154 @@
+"""FastAPI service: /predict and /explain endpoints + demo frontend."""
+
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+import pandas as pd
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+from zakkend import config
+from zakkend.explain.shap_explainer import SubsidenceExplainer
+from zakkend.models.baseline import TrainedModel
+
+# ───────────────────────────── Models in memory ─────────────────────────
+_model: TrainedModel | None = None
+_explainer: SubsidenceExplainer | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load the trained model into memory on startup."""
+    global _model, _explainer
+    if not config.MODEL_PATH.exists():
+        raise RuntimeError(
+            f"No trained model found at {config.MODEL_PATH}. "
+            "Run `python scripts/train.py` first."
+        )
+    _model = TrainedModel.load()
+    _explainer = SubsidenceExplainer(_model)
+    yield
+
+
+app = FastAPI(
+    title="Zakkend Nederland",
+    description="Foundation subsidence risk API for Dutch homes",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+# ─────────────────────────────── Schemas ────────────────────────────────
+class BuildingInput(BaseModel):
+    """Feature inputs for a single building.
+
+    Ranges reflect plausible Dutch data; the API validates conservatively.
+    """
+
+    year_built: int = Field(..., ge=1700, le=2026)
+    building_age: int = Field(..., ge=0, le=326)
+    foundation_type: str = Field(..., examples=["wooden_pile"])
+    soil_type: str = Field(..., examples=["peat"])
+    peat_thickness_m: float = Field(..., ge=0, le=20)
+    groundwater_depth_m: float = Field(..., ge=0, le=10)
+    groundwater_variability: float = Field(..., ge=0, le=1)
+    insar_deformation_mm_yr: float = Field(..., ge=-10, le=30)
+    drought_exposure_index: float = Field(..., ge=0, le=1)
+    distance_to_water_m: int = Field(..., ge=0, le=50_000)
+    neighborhood_damage_rate: float = Field(..., ge=0, le=1)
+
+
+class ClassProbability(BaseModel):
+    class_name: str
+    probability: float
+
+
+class PredictionResponse(BaseModel):
+    predicted_class: str
+    class_probabilities: list[ClassProbability]
+    risk_score: float  # expected value — 0..1
+
+
+class ContributionOut(BaseModel):
+    feature: str
+    value: str
+    shap_value: float
+    direction: str
+
+
+class ExplanationResponse(PredictionResponse):
+    base_value: float
+    top_drivers: list[ContributionOut]
+
+
+# ──────────────────────────────── Routes ────────────────────────────────
+@app.get("/", include_in_schema=False)
+def root():
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "model_loaded": _model is not None}
+
+
+def _to_dataframe(inp: BuildingInput) -> pd.DataFrame:
+    return pd.DataFrame([inp.model_dump()])
+
+
+def _expected_risk_score(probs: list[float]) -> float:
+    """Probability-weighted mean of ordinal class indices, normalized to 0..1."""
+    n = len(config.RISK_CLASSES) - 1
+    return float(sum(p * (i / n) for i, p in enumerate(probs)))
+
+
+@app.post("/predict", response_model=PredictionResponse)
+def predict(inp: BuildingInput) -> PredictionResponse:
+    if _model is None:
+        raise HTTPException(503, "Model not loaded")
+    df = _to_dataframe(inp)
+    probs = _model.predict_proba(df)[0]
+    cls_probs = [
+        ClassProbability(class_name=n, probability=float(p))
+        for n, p in zip(_model.class_names, probs)
+    ]
+    return PredictionResponse(
+        predicted_class=_model.class_names[int(probs.argmax())],
+        class_probabilities=cls_probs,
+        risk_score=_expected_risk_score(list(probs)),
+    )
+
+
+@app.post("/explain", response_model=ExplanationResponse)
+def explain(inp: BuildingInput) -> ExplanationResponse:
+    if _model is None or _explainer is None:
+        raise HTTPException(503, "Model not loaded")
+    df = _to_dataframe(inp)
+    probs = _model.predict_proba(df)[0]
+    expl = _explainer.explain(df)
+
+    return ExplanationResponse(
+        predicted_class=expl.predicted_class,
+        class_probabilities=[
+            ClassProbability(class_name=n, probability=float(p))
+            for n, p in zip(_model.class_names, probs)
+        ],
+        risk_score=_expected_risk_score(list(probs)),
+        base_value=expl.base_value,
+        top_drivers=[
+            ContributionOut(
+                feature=c.feature,
+                value=str(c.value),
+                shap_value=c.shap_value,
+                direction=c.direction,
+            )
+            for c in expl.top_drivers(k=5)
+        ],
+    )
