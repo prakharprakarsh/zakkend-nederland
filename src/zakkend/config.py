@@ -17,30 +17,24 @@ for _dir in (DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR):
 MODEL_PATH: Path = MODELS_DIR / "subsidence_xgb.joblib"
 
 # ──────────────────── Netherlands geographic bounds ─────────────────
-# Approximate bounding box covering Dutch mainland (WGS84).
 NL_LAT_MIN: float = 50.75
 NL_LAT_MAX: float = 53.55
 NL_LON_MIN: float = 3.35
 NL_LON_MAX: float = 7.25
 
 # ──────────────────────── Soil categories ──────────────────────────
-# Simplified from TNO's Bodemkaart classifications.
 SOIL_TYPES: tuple[str, ...] = ("peat", "clay", "sandy_clay", "sand", "loess")
 
-# Peat is concentrated in the western / northern provinces (Zuid-Holland,
-# Noord-Holland, Utrecht, Friesland). This lookup approximates that.
 HIGH_PEAT_PROVINCE_LAT_RANGE: tuple[float, float] = (51.85, 53.25)
 HIGH_PEAT_PROVINCE_LON_RANGE: tuple[float, float] = (4.20, 5.60)
 
 # ─────────────────────── Foundation types ──────────────────────────
 FOUNDATION_TYPES: tuple[str, ...] = ("wooden_pile", "concrete_pile", "strip", "slab")
-
-# Historical pattern: wooden piles dominate pre-1970 builds in peat areas.
 WOODEN_PILE_ERA_END: int = 1970
 
 # ───────────────────── Risk-score thresholds ───────────────────────
 RISK_CLASSES: tuple[str, ...] = ("low", "moderate", "high", "critical")
-RISK_THRESHOLDS: tuple[float, ...] = (0.25, 0.50, 0.75)  # splits: low|mod|high|crit
+RISK_THRESHOLDS: tuple[float, ...] = (0.25, 0.50, 0.75)
 
 # ──────────────────────── Feature schema ───────────────────────────
 FEATURE_COLUMNS: list[str] = [
@@ -60,3 +54,29 @@ CATEGORICAL_FEATURES: list[str] = ["foundation_type", "soil_type"]
 TARGET_COLUMN: str = "risk_class"
 
 RANDOM_STATE: int = 42
+
+# ──────────────── Target municipalities for Phase 2 ────────────────
+# These are known high-risk areas for subsidence.
+TARGET_MUNICIPALITIES: dict[str, dict] = {
+    "Gouda": {
+        "bbox": (4.68, 52.00, 4.75, 52.03),  # (lon_min, lat_min, lon_max, lat_max)
+        "municipality_code": "0513",
+    },
+    "Rotterdam": {
+        "bbox": (4.40, 51.88, 4.56, 51.96),
+        "municipality_code": "0599",
+    },
+    "Zaanstad": {
+        "bbox": (4.75, 52.43, 4.88, 52.50),
+        "municipality_code": "0479",
+    },
+    "Dordrecht": {
+        "bbox": (4.62, 51.78, 4.72, 51.83),
+        "municipality_code": "0505",
+    },
+}
+
+# ──────────────────── PDOK API endpoints ───────────────────────────
+PDOK_BAG_WFS: str = "https://service.pdok.nl/lv/bag/wfs/v2_0"
+PDOK_BRO_SOIL_WFS: str = "https://service.pdok.nl/bzk/bro-bodemkaart/wfs/v1_0"
+KNMI_OPEN_DATA_BASE: str = "https://www.daggegevens.knmi.nl/klimatologie/daggegevens"
