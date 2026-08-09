@@ -316,7 +316,7 @@ Either wrap the classifier in `CalibratedClassifierCV(method="isotonic", cv=5)` 
 reliability plot — genuinely a strong, cheap addition given the compliance framing — or delete the
 word from all three places.
 
-### 1.5 API accepts contradictory and unvalidated inputs
+### 1.5 API accepts contradictory and unvalidated inputs ✅ fixed
 
 Reproduced:
 ```
@@ -324,17 +324,20 @@ POST /predict {"year_built": 2020, "building_age": 300, ...}  → 200 OK, "criti
 POST /predict {"foundation_type": "banana", ...}              → 500 (uncaught XGBoostError on 3.x)
 ```
 
-- `building_age` should never be a user input. Derive it: `building_age = current_year - year_built`.
-  Drop it from `BuildingInput` entirely.
-- `foundation_type` / `soil_type` are typed `str`. Use `Literal` so FastAPI returns a clean 422 and
-  the values show up in the OpenAPI schema:
-  ```python
-  from typing import Literal
-  foundation_type: Literal["wooden_pile", "concrete_pile", "strip", "slab"]
-  soil_type: Literal["peat", "clay", "sandy_clay", "sand", "loess"]
-  ```
-- Hardcoded `2026` in `pipeline.py:176` (`result["building_age"] = 2026 - result["year_built"]`) —
-  use `datetime.now().year`, or better, a `REFERENCE_YEAR` constant so training is reproducible.
+**Fixed in `hardening` branch:**
+
+- `building_age` removed from `BuildingInput`. `ConfigDict(extra="forbid")` added so any payload
+  that includes `building_age` receives 422. `_to_dataframe()` derives it server-side:
+  `data["building_age"] = config.REFERENCE_YEAR - data["year_built"]`.
+- `foundation_type` and `soil_type` changed from `str` to `Literal` types over
+  `config.FOUNDATION_TYPES` and `config.SOIL_TYPES`. FastAPI returns 422 and the values appear
+  as string enums in the OpenAPI schema. `UnknownCategoryError` handler kept as defence-in-depth.
+- `config.REFERENCE_YEAR = 2026` constant added. Used in `pipeline.py`, `synthetic.py`, and
+  `api/main.py`. `index.html` and `spaces/app.py` updated to stop sending `building_age`.
+- Tests: 64 passing. New test `test_building_age_field_rejected` confirms the contradictory
+  `{year_built: 2020, building_age: 300}` payload now returns 422. Renamed
+  `test_unknown_*_returns_422` to `test_invalid_*_returns_422` (Pydantic catches it, not
+  `UnknownCategoryError`, though the status code is the same).
 
 ### 1.6 RNG seed collisions produce duplicate "measurements"
 

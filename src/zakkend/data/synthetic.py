@@ -165,7 +165,7 @@ def generate(
             era_choice == 1, rng.integers(1945, 1990, size=n), rng.integers(1990, 2025, size=n)
         ),
     )
-    building_age = 2026 - year_built
+    building_age = config.REFERENCE_YEAR - year_built
 
     soil = _sample_soil(rng, in_peat)
     foundation = _sample_foundation(rng, year_built, soil)
