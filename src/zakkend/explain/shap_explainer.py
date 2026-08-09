@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import shap
+import xgboost as xgb
 
 from zakkend.features.engineering import build_feature_matrix
 from zakkend.models.baseline import TrainedModel
@@ -54,8 +55,11 @@ class SubsidenceExplainer:
         probs = self.model.predict_proba(x_feat)[0]
         pred_idx = int(probs.argmax())
 
+        # Pass a DMatrix so SHAP does not build its own without enable_categorical.
+        # (For bare Boosters, SHAP's internal DMatrix construction omits the flag.)
+        dm = xgb.DMatrix(x_feat, enable_categorical=True)
         # For multi-class XGBoost, shap_values is shape (n, n_features, n_classes)
-        shap_values = self._explainer.shap_values(x_feat)
+        shap_values = self._explainer.shap_values(dm)
         shap_values = np.asarray(shap_values)
 
         sv = shap_values[0, :, pred_idx] if shap_values.ndim == 3 else shap_values[0]

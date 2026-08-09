@@ -37,7 +37,7 @@ class TrainedModel:
 
     def predict_proba(self, df: pd.DataFrame) -> np.ndarray:
         x_ready = build_feature_matrix(df, category_levels=self.category_levels)
-        dm = xgb.DMatrix(x_ready)
+        dm = xgb.DMatrix(x_ready, enable_categorical=True)
         probs = self.classifier.predict(dm)
         if probs.ndim == 1:
             probs = probs.reshape(-1, len(self.class_names))
@@ -265,9 +265,9 @@ def train(
 
     weights = _sample_weights(y_train, use_sample_weights)
 
-    dm_train = xgb.DMatrix(x_train, label=y_train, weight=weights)
-    dm_val = xgb.DMatrix(x_val, label=y_val)
-    dm_test = xgb.DMatrix(x_test, label=y_test)
+    dm_train = xgb.DMatrix(x_train, label=y_train, weight=weights, enable_categorical=True)
+    dm_val = xgb.DMatrix(x_val, label=y_val, enable_categorical=True)
+    dm_test = xgb.DMatrix(x_test, label=y_test, enable_categorical=True)
 
     bst = xgb.train(
         _booster_params(),
