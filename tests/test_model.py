@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from zakkend import config
@@ -59,6 +60,74 @@ def test_shap_explainer_returns_contributions(trained_model):
     assert expl.predicted_class in config.RISK_CLASSES
     assert len(expl.contributions) == len(config.FEATURE_COLUMNS)
     assert len(expl.top_drivers(k=3)) == 3
+
+
+def test_baselines_computed_and_in_metrics(trained_model):
+    """DummyClassifier baselines must be present and cover all four strategies."""
+    baselines = trained_model.metrics.get("baselines", {})
+    for strategy in ("most_frequent", "prior", "stratified", "uniform"):
+        assert strategy in baselines, f"baseline '{strategy}' missing from metrics"
+        assert 0.0 < baselines[strategy] < 1.0
+
+
+def test_model_beats_majority_class_baseline(trained_model):
+    """XGBoost must beat most_frequent by >20 percentage points on the test split."""
+    xgb_acc = trained_model.metrics["accuracy"]
+    mf_acc = trained_model.metrics["baselines"]["most_frequent"]
+    margin = xgb_acc - mf_acc
+    assert margin > 0.20, (
+        f"XGBoost ({xgb_acc:.3f}) beats most_frequent ({mf_acc:.3f}) by only "
+        f"{margin:.3f} — expected >0.20"
+    )
+
+
+def test_three_way_split_sizes(trained_model):
+    """60/20/20 split: n_train + n_val + n_test must equal the input length."""
+    m = trained_model.metrics
+    assert "n_val" in m, "three-way split must report n_val"
+    total = m["n_train"] + m["n_val"] + m["n_test"]
+    # fixture trains on n=2000
+    assert total == 2_000
+    # approximately 60/20/20 within rounding of stratified splits
+    assert 0.55 <= m["n_train"] / total <= 0.65
+    assert 0.15 <= m["n_val"] / total <= 0.25
+    assert 0.15 <= m["n_test"] / total <= 0.25
+
+
+def test_grouped_split_municipality_disjoint():
+    """Train and test municipality sets must not overlap in the grouped split."""
+    from sklearn.model_selection import train_test_split as sk_split
+
+    from zakkend.data.synthetic import generate_for_municipality
+
+    train_munis = ["Gouda", "Rotterdam", "Zaanstad"]
+    test_muni = "Dordrecht"
+
+    train_frames = [generate_for_municipality(m, n=500) for m in train_munis]
+    train_df = pd.concat(train_frames, ignore_index=True)
+    dordrecht_df = generate_for_municipality(test_muni, n=500)
+
+    # Val split from training data
+    train_core, val_df = sk_split(
+        train_df,
+        test_size=0.20,
+        random_state=config.RANDOM_STATE,
+    )
+
+    model = train(
+        train_core,
+        val_df=val_df,
+        test_df=dordrecht_df,
+        municipality_split={"train": train_munis, "test": [test_muni]},
+    )
+
+    ms = model.metrics.get("municipality_split", {})
+    assert ms, "municipality_split must be in metrics when provided"
+    train_set = set(ms["train"])
+    test_set = set(ms["test"])
+    assert train_set.isdisjoint(
+        test_set
+    ), f"Municipality overlap between train {train_set} and test {test_set}"
 
 
 def test_shap_directions_labeled(trained_model):
