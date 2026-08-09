@@ -52,10 +52,12 @@ zone data; see `docs/LIMITATIONS.md`.
 
 ## Data sources
 
-Of the 11 model features, only 1 is measured directly from a government registry.
-`building_age` is arithmetic (`2026 − year_built`, computed in `pipeline._harmonize_to_schema`)
-— it carries no additional information beyond `year_built` itself and is not a
-separate real measurement:
+Of the 11 model features, only `year_built` is measured directly from a government
+registry (PDOK BAG `bouwjaar`). The building centroid (`lat`/`lon`) is also a real PDOK BAG
+measurement — it drives the coordinate-based estimators for soil, InSAR, and drought — but
+is not itself a model feature. `building_age` is derived arithmetically
+(`2026 − year_built` in `pipeline._harmonize_to_schema`) and is not a separate
+real measurement:
 
 | Feature | Source |
 |---------|--------|
