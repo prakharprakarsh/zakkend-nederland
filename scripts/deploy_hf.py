@@ -47,9 +47,10 @@ def main() -> None:
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.egg-info"),
     )
 
-    # 2. Copy trained model
-    model_src = MODELS_DIR / "subsidence_xgb.joblib"
-    if not model_src.exists():
+    # 2. Copy trained model artefacts (.ubj + .meta.json)
+    model_ubj = MODELS_DIR / "subsidence_xgb.ubj"
+    model_meta = MODELS_DIR / "subsidence_xgb.meta.json"
+    if not model_ubj.exists():
         print("✗ No trained model found! Run training first:")
         print("  python scripts/train.py")
         print("  — or —")
@@ -58,9 +59,10 @@ def main() -> None:
 
     spaces_models = SPACES_DIR / "models"
     spaces_models.mkdir(exist_ok=True)
-    dest_model = spaces_models / "subsidence_xgb.joblib"
-    print(f"→ Copying model to {dest_model}")
-    shutil.copy2(model_src, dest_model)
+    print(f"→ Copying model to {spaces_models / 'subsidence_xgb.ubj'}")
+    shutil.copy2(model_ubj, spaces_models / "subsidence_xgb.ubj")
+    if model_meta.exists():
+        shutil.copy2(model_meta, spaces_models / "subsidence_xgb.meta.json")
 
     # Also copy metrics.json if it exists
     metrics_src = MODELS_DIR / "metrics.json"
@@ -74,10 +76,10 @@ def main() -> None:
 
     # 4. Summary
     total_files = sum(1 for _ in SPACES_DIR.rglob("*") if _.is_file())
-    model_size_mb = dest_model.stat().st_size / (1024 * 1024)
+    model_size_mb = (spaces_models / "subsidence_xgb.ubj").stat().st_size / (1024 * 1024)
 
     print(f"\n{'=' * 60}")
-    print(f"  ✓ Deployment package ready!")
+    print("  ✓ Deployment package ready!")
     print(f"{'=' * 60}")
     print(f"  Directory:  {SPACES_DIR}")
     print(f"  Files:      {total_files}")
@@ -92,7 +94,9 @@ def main() -> None:
     print("  2. Push to HF:")
     print("     cd spaces/")
     print("     git init")
-    print("     git remote add origin https://huggingface.co/spaces/<YOUR_USERNAME>/zakkend-nederland")
+    print(
+        "     git remote add origin https://huggingface.co/spaces/<YOUR_USERNAME>/zakkend-nederland"
+    )
     print("     git add .")
     print('     git commit -m "Deploy Zakkend Nederland"')
     print("     git push -u origin main")

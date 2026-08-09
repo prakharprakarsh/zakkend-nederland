@@ -1,59 +1,168 @@
 {
-  "accuracy": 0.829,
-  "macro_f1": 0.7837562054246282,
-  "weighted_f1": 0.8265340144341548,
-  "per_class": {
-    "low": {
-      "precision": 0.719626168224299,
-      "recall": 0.5422535211267606,
-      "f1": 0.6184738955823293,
-      "support": 142
+  "random_split": {
+    "accuracy": 0.8245,
+    "macro_f1": 0.7966019960702602,
+    "weighted_f1": 0.8263779729531928,
+    "per_class": {
+      "low": {
+        "precision": 0.6341463414634146,
+        "recall": 0.7323943661971831,
+        "f1": 0.6797385620915033,
+        "support": 142
+      },
+      "moderate": {
+        "precision": 0.8805496828752643,
+        "recall": 0.8422649140546006,
+        "f1": 0.8609819121447029,
+        "support": 989
+      },
+      "high": {
+        "precision": 0.7465034965034965,
+        "recall": 0.7981308411214953,
+        "f1": 0.7714543812104788,
+        "support": 535
+      },
+      "critical": {
+        "precision": 0.8962264150943396,
+        "recall": 0.8532934131736527,
+        "f1": 0.8742331288343558,
+        "support": 334
+      }
     },
-    "moderate": {
-      "precision": 0.8450570342205324,
-      "recall": 0.8988877654196158,
-      "f1": 0.871141597256247,
-      "support": 989
-    },
-    "high": {
-      "precision": 0.7748091603053435,
-      "recall": 0.7588785046728972,
-      "f1": 0.7667610953729934,
-      "support": 535
-    },
-    "critical": {
-      "precision": 0.9022082018927445,
-      "recall": 0.8562874251497006,
-      "f1": 0.8786482334869432,
-      "support": 334
+    "confusion_matrix": [
+      [
+        104,
+        38,
+        0,
+        0
+      ],
+      [
+        60,
+        833,
+        96,
+        0
+      ],
+      [
+        0,
+        75,
+        427,
+        33
+      ],
+      [
+        0,
+        0,
+        49,
+        285
+      ]
+    ],
+    "n_train": 6000,
+    "n_val": 2000,
+    "n_test": 2000,
+    "best_iteration": 182,
+    "sample_weighted": true,
+    "baselines": {
+      "most_frequent": 0.4945,
+      "prior": 0.4945,
+      "stratified": 0.3505,
+      "uniform": 0.253,
+      "uniform_4class": 0.25
     }
   },
-  "confusion_matrix": [
-    [
-      77,
-      65,
-      0,
-      0
+  "grouped_split": {
+    "accuracy": 0.09240246406570841,
+    "macro_f1": 0.14188854771537124,
+    "weighted_f1": 0.06306836270502997,
+    "per_class": {
+      "low": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 177
+      },
+      "moderate": {
+        "precision": 0.5135135135135135,
+        "recall": 0.030063291139240507,
+        "f1": 0.05680119581464873,
+        "support": 632
+      },
+      "high": {
+        "precision": 0.0422360248447205,
+        "recall": 0.265625,
+        "f1": 0.07288317256162916,
+        "support": 128
+      },
+      "critical": {
+        "precision": 0.2803030303030303,
+        "recall": 1.0,
+        "f1": 0.4378698224852071,
+        "support": 37
+      }
+    },
+    "confusion_matrix": [
+      [
+        0,
+        18,
+        159,
+        0
+      ],
+      [
+        0,
+        19,
+        612,
+        1
+      ],
+      [
+        0,
+        0,
+        34,
+        94
+      ],
+      [
+        0,
+        0,
+        0,
+        37
+      ]
     ],
-    [
-      30,
-      889,
-      70,
-      0
-    ],
-    [
-      0,
-      98,
-      406,
-      31
-    ],
-    [
-      0,
-      0,
-      48,
-      286
-    ]
-  ],
-  "n_train": 8000,
-  "n_test": 2000
+    "n_train": 2283,
+    "n_val": 571,
+    "n_test": 974,
+    "best_iteration": 112,
+    "sample_weighted": true,
+    "baselines": {
+      "most_frequent": 0.038,
+      "prior": 0.038,
+      "stratified": 0.077,
+      "uniform": 0.2895,
+      "uniform_4class": 0.25
+    },
+    "municipality_split": {
+      "train": [
+        "Gouda",
+        "Rotterdam",
+        "Zaanstad"
+      ],
+      "test": [
+        "Dordrecht"
+      ]
+    },
+    "evaluation_notes": {
+      "soil_type": {
+        "unseen_in_test": [
+          "sandy_clay"
+        ],
+        "training_vocabulary": [
+          "peat"
+        ],
+        "note": "Test rows with soil_type in ['sandy_clay'] are not in the training vocabulary ['peat']. They are encoded as NaN and handled by XGBoost's missing-value split. The reported accuracy conflates geographic distribution shift with unseen-category coverage; these effects cannot be separated from this evaluation alone."
+      },
+      "absent_training_classes": {
+        "classes": [
+          "low"
+        ],
+        "note": "Classes ['low'] have zero training examples under the rule engine for the given municipalities. XGBoost (num_class=4) still outputs 4-class probabilities; absent classes receive base-score logits only. No synthetic anchor rows were injected."
+      }
+    },
+    "confound_note": "This result is model collapse, not degradation. Accuracy 0.0924 is below uniform random (0.25 / 4-class). Three confounds compound: (1) soil_type is perfectly confounded with municipality \u2014 training cities are 100% peat, Dordrecht is 100% sandy_clay, so all 974 Dordrecht test rows have soil_type=NaN (unseen category encoded as missing value). (2) Zero low-class training examples \u2014 the rule engine produces no low-risk buildings in peat-zone municipalities, so the model never learned low-risk patterns. (3) Class distribution inversion \u2014 training is 76% critical, Dordrecht is 65% moderate. The missing-value branch routes most Dordrecht rows to critical (the dominant training class), yielding 100% recall on the 37 true-critical buildings and near-zero recall on moderate/low. No synthetic anchor rows were injected \u2014 the result is fully real-data."
+  }
 }

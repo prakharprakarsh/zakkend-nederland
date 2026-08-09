@@ -32,7 +32,7 @@ SHAP explanations human-readable.
 XGBoost `multi:softprob` over 4 ordinal risk classes. Chosen because:
 
 - Handles mixed numeric/categorical cleanly
-- Robust to missing values (real PDOK/InSAR data will be sparse)
+- Robust to missing values (when real InSAR and BRO soil data replace the current coordinate-based estimates, those sources are naturally sparse)
 - Tree-SHAP is exact and fast — critical for real-time explanation API
 - Widely deployed in Dutch banks' credit models, so explainability stories
   translate directly to recruiter-relevant contexts
@@ -59,17 +59,19 @@ required changes in exactly three places:
 2. `scripts/train.py` — `fetch_and_train.py` added for real-data ETL
 3. Nothing else. Feature engineering, model, API, and UI were untouched.
 
-## Why synthetic data for Phase 1 (and still for training)
+## Why the model still trains on synthetic data
 
-Starting with synthetic data that encodes published domain dynamics means:
+Phase 2 ETL is complete: `data/bag.py` fetches real buildings from PDOK BAG and
+coordinate-based estimators fill the remaining features. The model, however, still
+trains on synthetic labels because there is no public per-address ground truth for
+Dutch foundation damage. Synthetic training remains the default for three reasons:
 
-- The demo is fully reproducible on any machine without credentials or API access
-- The model learns domain patterns (peat + wooden pile + drought → risk)
+- `python scripts/train.py` is fully reproducible without credentials or API access
+- CI regenerates `models/metrics.json` deterministically (RANDOM_STATE = 42)
+- The synthetic labels encode documented domain patterns (peat + wooden pile + drought → risk)
   rather than memorising a one-off dataset
-- CI can regenerate training metrics deterministically (RANDOM_STATE = 42)
 
-The current trained model still uses synthetic labels. The transition to real
-supervision is the primary goal of Phase 5; see `docs/LIMITATIONS.md §L1`.
+The transition to real supervision is the primary goal of Phase 5; see `docs/LIMITATIONS.md §L1`.
 
 Validation against KCAF's known-damage dataset (to measure real-world predictive skill,
 as opposed to the current rule-recovery metric) is Phase 5.
