@@ -162,6 +162,7 @@
         ],
         "note": "Training data lacked ['low'] class(es). 1 synthetic anchor row(s) were added to satisfy XGBoost's contiguous-class-label requirement. The model has effectively 0 real training examples for these classes."
       }
-    }
+    },
+    "confound_note": "This result is model collapse, not degradation. Root cause: the coordinate-based soil classifier assigns one soil type per bounding box. All three training municipalities (Gouda, Rotterdam, Zaanstad) are 100% peat; the held-out city (Dordrecht) is 100% sandy_clay. soil_type is therefore perfectly confounded with municipality \u2014 the model learned a soil-municipality shortcut rather than transferable structure. All 974 Dordrecht test rows have soil_type encoded as NaN (unseen category), causing the model to predict low for 972/974 rows. Accuracy: 0.183. Uniform baseline: 0.225. The model performs worse than random on an unseen city. The random-split figure (0.824) should not be read as evidence of generalisation."
   }
 }
