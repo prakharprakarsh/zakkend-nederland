@@ -9,7 +9,7 @@ structured knowledge that the report-drafting node draws from.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,9 @@ REMEDIATION_OPTIONS: list[RemediationOption] = [
             "micro-piles through the existing structure down to the sand layer. "
             "The building is temporarily supported on hydraulic jacks."
         ),
-        applicable_when="Wooden pile rot confirmed; foundation bearing capacity below safe threshold",
+        applicable_when=(
+            "Wooden pile rot confirmed; foundation bearing capacity below safe threshold"
+        ),
         estimated_cost_eur="€40,000–€120,000 per home (depends on size and access)",
         typical_duration="4–8 weeks per home",
         urgency="immediate",
@@ -186,6 +188,7 @@ INSPECTION_BODIES: list[InspectionBody] = [
 
 # ──────────────────── Lookup functions ────────────────────
 
+
 def get_applicable_remediations(
     risk_class: str,
     foundation_type: str,
@@ -196,36 +199,35 @@ def get_applicable_remediations(
 
     if risk_class == "critical":
         # Critical: full pile replacement + groundwater management
-        results.extend([
-            r for r in REMEDIATION_OPTIONS
-            if r.urgency == "immediate"
-        ])
+        results.extend([r for r in REMEDIATION_OPTIONS if r.urgency == "immediate"])
         if foundation_type == "wooden_pile":
-            results.extend([
-                r for r in REMEDIATION_OPTIONS
-                if "grondwater" in r.name.lower() or "groundwater" in r.description.lower()
-            ])
+            results.extend(
+                [
+                    r
+                    for r in REMEDIATION_OPTIONS
+                    if "grondwater" in r.name.lower() or "groundwater" in r.description.lower()
+                ]
+            )
 
     elif risk_class == "high":
         # High: soil injection, groundwater management, monitoring
-        results.extend([
-            r for r in REMEDIATION_OPTIONS
-            if r.urgency in ("within_1_year", "monitoring")
-        ])
+        results.extend(
+            [r for r in REMEDIATION_OPTIONS if r.urgency in ("within_1_year", "monitoring")]
+        )
 
     elif risk_class == "moderate":
         # Moderate: monitoring + drainage
-        results.extend([
-            r for r in REMEDIATION_OPTIONS
-            if r.urgency == "monitoring" or "drainage" in r.name.lower()
-        ])
+        results.extend(
+            [
+                r
+                for r in REMEDIATION_OPTIONS
+                if r.urgency == "monitoring" or "drainage" in r.name.lower()
+            ]
+        )
 
     else:
         # Low: monitoring only
-        results.extend([
-            r for r in REMEDIATION_OPTIONS
-            if r.urgency == "monitoring"
-        ])
+        results.extend([r for r in REMEDIATION_OPTIONS if r.urgency == "monitoring"])
 
     # Deduplicate by name
     seen = set()
@@ -243,7 +245,9 @@ def get_applicable_funding(risk_class: str) -> list[FundingScheme]:
     if risk_class in ("critical", "high"):
         return FUNDING_SCHEMES  # All schemes potentially applicable
     elif risk_class == "moderate":
-        return [f for f in FUNDING_SCHEMES if "loket" in f.name.lower() or "gemeente" in f.name.lower()]
+        return [
+            f for f in FUNDING_SCHEMES if "loket" in f.name.lower() or "gemeente" in f.name.lower()
+        ]
     else:
         return [FUNDING_SCHEMES[1]]  # KCAF Funderingsloket (free advice)
 

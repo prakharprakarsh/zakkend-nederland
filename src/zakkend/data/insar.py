@@ -31,14 +31,10 @@ import logging
 import numpy as np
 import pandas as pd
 
-from zakkend import config
-
 logger = logging.getLogger(__name__)
 
 
-def _estimate_insar_deformation(
-    lat: float, lon: float, soil_type: str, year_built: int
-) -> float:
+def _estimate_insar_deformation(lat: float, lon: float, soil_type: str, year_built: int) -> float:
     """Estimate InSAR vertical deformation rate (mm/yr, positive = subsidence).
 
     Calibrated against published BodemDalingsKaart values for known areas.
@@ -121,9 +117,7 @@ def enrich_with_insar(df: pd.DataFrame) -> pd.DataFrame:
 
     deformations = [
         round(
-            _estimate_insar_deformation(
-                row["lat"], row["lon"], row["soil_type"], row[year_col]
-            ),
+            _estimate_insar_deformation(row["lat"], row["lon"], row["soil_type"], row[year_col]),
             2,
         )
         for _, row in result.iterrows()
