@@ -59,6 +59,8 @@ data/processed/*
 !data/processed/.gitkeep
 models/*.pkl
 models/*.joblib
+models/*.ubj
+models/*.meta.json
 models/*.onnx
 !models/.gitkeep
 
