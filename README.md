@@ -5,8 +5,8 @@
 > with total damage projected at **€60+ billion by 2050**. Homeowners currently have
 > no way to know their risk until cracks appear. This project changes that.
 
-![status](https://img.shields.io/badge/status-Phase%201%20%7C%20MVP-blue)
-![python](https://img.shields.io/badge/python-3.12-blue)
+[![CI](https://github.com/prakharprakarsh/zakkend-nederland/actions/workflows/ci.yml/badge.svg)](https://github.com/prakharprakarsh/zakkend-nederland/actions/workflows/ci.yml)
+![python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![eu-ai-act](https://img.shields.io/badge/EU%20AI%20Act-aware-orange)
 
