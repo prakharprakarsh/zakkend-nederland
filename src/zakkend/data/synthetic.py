@@ -130,7 +130,15 @@ def _score_to_class(scores: np.ndarray) -> np.ndarray:
     return classes
 
 
-def generate(n: int = 10_000, seed: int = config.RANDOM_STATE) -> pd.DataFrame:
+def generate(
+    n: int = 10_000,
+    seed: int = config.RANDOM_STATE,
+    *,
+    lat_min: float = config.NL_LAT_MIN,
+    lat_max: float = config.NL_LAT_MAX,
+    lon_min: float = config.NL_LON_MIN,
+    lon_max: float = config.NL_LON_MAX,
+) -> pd.DataFrame:
     """Generate n synthetic buildings across the Netherlands.
 
     Parameters
@@ -139,6 +147,14 @@ def generate(n: int = 10_000, seed: int = config.RANDOM_STATE) -> pd.DataFrame:
         Number of synthetic buildings to generate.
     seed : int
         Reproducibility seed.
+    lat_min : float
+        Southern latitude bound (degrees). Defaults to NL-wide minimum.
+    lat_max : float
+        Northern latitude bound (degrees). Defaults to NL-wide maximum.
+    lon_min : float
+        Western longitude bound (degrees). Defaults to NL-wide minimum.
+    lon_max : float
+        Eastern longitude bound (degrees). Defaults to NL-wide maximum.
 
     Returns
     -------
@@ -148,8 +164,8 @@ def generate(n: int = 10_000, seed: int = config.RANDOM_STATE) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
 
     # --- Location ---
-    lat = rng.uniform(config.NL_LAT_MIN, config.NL_LAT_MAX, n)
-    lon = rng.uniform(config.NL_LON_MIN, config.NL_LON_MAX, n)
+    lat = rng.uniform(lat_min, lat_max, n)
+    lon = rng.uniform(lon_min, lon_max, n)
     in_peat = _in_peat_zone(lat, lon)
 
     # --- Building attributes ---
@@ -225,6 +241,54 @@ def generate(n: int = 10_000, seed: int = config.RANDOM_STATE) -> pd.DataFrame:
 
     df["risk_score"] = _compute_risk_score(df).round(3)
     df["risk_class"] = _score_to_class(df["risk_score"].values)
+    return df
+
+
+def generate_for_municipality(
+    municipality: str,
+    n: int = 2_500,
+    seed: int = config.RANDOM_STATE,
+) -> pd.DataFrame:
+    """Generate synthetic buildings clipped to a target municipality bounding box.
+
+    Parameters
+    ----------
+    municipality : str
+        Name of the municipality. Must be a key in `config.TARGET_MUNICIPALITIES`.
+    n : int
+        Number of synthetic buildings to generate.
+    seed : int
+        Reproducibility seed.
+
+    Returns
+    -------
+    pd.DataFrame
+        Feature matrix with `risk_score`, `risk_class`, and a `municipality` column
+        set to the provided municipality name.
+
+    Raises
+    ------
+    ValueError
+        If `municipality` is not in `config.TARGET_MUNICIPALITIES`.
+    """
+    if municipality not in config.TARGET_MUNICIPALITIES:
+        raise ValueError(
+            f"Unknown municipality {municipality!r}. "
+            f"Must be one of: {sorted(config.TARGET_MUNICIPALITIES)}"
+        )
+
+    bbox = config.TARGET_MUNICIPALITIES[municipality]["bbox"]
+    lon_min, lat_min, lon_max, lat_max = bbox
+
+    df = generate(
+        n=n,
+        seed=seed,
+        lat_min=lat_min,
+        lat_max=lat_max,
+        lon_min=lon_min,
+        lon_max=lon_max,
+    )
+    df["municipality"] = municipality
     return df
 
 

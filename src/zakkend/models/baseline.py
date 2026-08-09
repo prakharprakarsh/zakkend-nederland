@@ -12,8 +12,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import xgboost as xgb
+from sklearn.dummy import DummyClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
+from sklearn.utils.class_weight import compute_sample_weight
 
 from zakkend import config
 from zakkend.features.engineering import build_feature_matrix, encode_risk_class
@@ -126,6 +128,7 @@ def build_classifier() -> xgb.XGBClassifier:
         num_class=len(config.RISK_CLASSES),
         enable_categorical=True,
         tree_method="hist",
+        early_stopping_rounds=30,
         random_state=config.RANDOM_STATE,
         n_jobs=-1,
     )
@@ -133,13 +136,46 @@ def build_classifier() -> xgb.XGBClassifier:
 
 def train(
     df: pd.DataFrame,
-    test_size: float = 0.2,
+    *,
+    val_df: pd.DataFrame | None = None,
+    test_df: pd.DataFrame | None = None,
+    use_sample_weights: bool = True,
+    municipality_split: dict[str, list[str]] | None = None,
 ) -> TrainedModel:
     """Train the baseline model on a labeled dataframe.
 
     Expects `df` to contain every column in `config.FEATURE_COLUMNS`
     plus the target `config.TARGET_COLUMN`.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Training data (or full dataset when val_df/test_df are None).
+    val_df : pd.DataFrame or None
+        Pre-built validation split. Must be provided together with `test_df`.
+        When None, a random 60/20/20 stratified split is used.
+    test_df : pd.DataFrame or None
+        Pre-built test split. Must be provided together with `val_df`.
+    use_sample_weights : bool
+        Whether to apply balanced class weights during XGBoost training.
+    municipality_split : dict or None
+        Metadata dict (e.g. ``{"train": [...], "test": [...]}``). When provided
+        it is stored verbatim in metrics under ``"municipality_split"``.
+
+    Returns
+    -------
+    TrainedModel
+        Fitted model with evaluation metrics.
+
+    Raises
+    ------
+    ValueError
+        If exactly one of `val_df` / `test_df` is None.
     """
+    if (val_df is None) != (test_df is None):
+        raise ValueError("val_df and test_df must both be provided or both be None")
+
+    # Compute category levels from the training frame only.
     category_levels = {
         col: sorted(df[col].astype(str).unique().tolist()) for col in config.CATEGORICAL_FEATURES
     }
@@ -147,16 +183,40 @@ def train(
     x = build_feature_matrix(df, category_levels=category_levels)
     y = encode_risk_class(df[config.TARGET_COLUMN])
 
-    x_train, x_test, y_train, y_test = train_test_split(
-        x,
-        y,
-        test_size=test_size,
-        stratify=y,
-        random_state=config.RANDOM_STATE,
-    )
+    if val_df is None:
+        # Random 60/20/20 stratified split.
+        x_trainval, x_test, y_trainval, y_test = train_test_split(
+            x,
+            y,
+            test_size=0.20,
+            stratify=y,
+            random_state=config.RANDOM_STATE,
+        )
+        x_train, x_val, y_train, y_val = train_test_split(
+            x_trainval,
+            y_trainval,
+            test_size=0.25,
+            stratify=y_trainval,
+            random_state=config.RANDOM_STATE,
+        )
+    else:
+        # Pre-supplied splits; df is the training frame.
+        x_train, y_train = x, y
+        x_val = build_feature_matrix(val_df, category_levels=category_levels)
+        y_val = encode_risk_class(val_df[config.TARGET_COLUMN])
+        x_test = build_feature_matrix(test_df, category_levels=category_levels)
+        y_test = encode_risk_class(test_df[config.TARGET_COLUMN])
+
+    weights = compute_sample_weight("balanced", y_train) if use_sample_weights else None
 
     clf = build_classifier()
-    clf.fit(x_train, y_train, eval_set=[(x_test, y_test)], verbose=False)
+    clf.fit(
+        x_train,
+        y_train,
+        eval_set=[(x_val, y_val)],
+        sample_weight=weights,
+        verbose=False,
+    )
 
     y_pred = clf.predict(x_test)
     report = classification_report(
@@ -164,7 +224,17 @@ def train(
     )
     cm = confusion_matrix(y_test, y_pred).tolist()
 
-    metrics = {
+    baselines: dict[str, float] = {}
+    for strategy in ("most_frequent", "prior", "stratified", "uniform"):
+        dummy = DummyClassifier(strategy=strategy, random_state=config.RANDOM_STATE)
+        dummy.fit(x_train, y_train)
+        baselines[strategy] = round(float(dummy.score(x_test, y_test)), 4)
+
+    best_iter = None
+    if hasattr(clf, "best_iteration") and clf.best_iteration is not None:
+        best_iter = int(clf.best_iteration)
+
+    metrics: dict[str, object] = {
         "accuracy": float(report["accuracy"]),
         "macro_f1": float(report["macro avg"]["f1-score"]),
         "weighted_f1": float(report["weighted avg"]["f1-score"]),
@@ -179,8 +249,15 @@ def train(
         },
         "confusion_matrix": cm,
         "n_train": len(x_train),
+        "n_val": len(x_val),
         "n_test": len(x_test),
+        "best_iteration": best_iter,
+        "sample_weighted": bool(use_sample_weights),
+        "baselines": baselines,
     }
+
+    if municipality_split is not None:
+        metrics["municipality_split"] = municipality_split
 
     return TrainedModel(
         classifier=clf,
