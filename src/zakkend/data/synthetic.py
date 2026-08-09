@@ -158,7 +158,9 @@ def generate(n: int = 10_000, seed: int = config.RANDOM_STATE) -> pd.DataFrame:
     year_built = np.where(
         era_choice == 0,
         rng.integers(1880, 1945, size=n),
-        np.where(era_choice == 1, rng.integers(1945, 1990, size=n), rng.integers(1990, 2025, size=n)),
+        np.where(
+            era_choice == 1, rng.integers(1945, 1990, size=n), rng.integers(1990, 2025, size=n)
+        ),
     )
     building_age = 2026 - year_built
 
@@ -173,7 +175,7 @@ def generate(n: int = 10_000, seed: int = config.RANDOM_STATE) -> pd.DataFrame:
     )
     groundwater_depth = np.where(
         in_peat,
-        rng.normal(0.9, 0.3, n),   # shallow in peat areas
+        rng.normal(0.9, 0.3, n),  # shallow in peat areas
         rng.normal(1.8, 0.6, n),
     ).clip(0.1, 5.0)
     groundwater_variability = rng.beta(2, 5, size=n)  # skewed low
@@ -191,9 +193,7 @@ def generate(n: int = 10_000, seed: int = config.RANDOM_STATE) -> pd.DataFrame:
 
     # Drought exposure: cumulative normalized index (0..1)
     drought = (
-        0.3
-        + 0.2 * (lat < 52.3)  # south slightly more drought-exposed
-        + rng.beta(2, 4, n) * 0.5
+        0.3 + 0.2 * (lat < 52.3) + rng.beta(2, 4, n) * 0.5  # south slightly more drought-exposed
     ).clip(0, 1)
 
     # --- Spatial features ---

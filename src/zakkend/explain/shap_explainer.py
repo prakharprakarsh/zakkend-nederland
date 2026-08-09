@@ -34,9 +34,7 @@ class Explanation:
     contributions: list[FeatureContribution]
 
     def top_drivers(self, k: int = 5) -> list[FeatureContribution]:
-        return sorted(
-            self.contributions, key=lambda c: abs(c.shap_value), reverse=True
-        )[:k]
+        return sorted(self.contributions, key=lambda c: abs(c.shap_value), reverse=True)[:k]
 
 
 class SubsidenceExplainer:
@@ -52,18 +50,15 @@ class SubsidenceExplainer:
         if len(row) != 1:
             raise ValueError("Explain one row at a time.")
 
-        X = build_feature_matrix(row, category_levels=self.model.category_levels)
-        probs = self.model.classifier.predict_proba(X)[0]
+        x_feat = build_feature_matrix(row, category_levels=self.model.category_levels)
+        probs = self.model.classifier.predict_proba(x_feat)[0]
         pred_idx = int(probs.argmax())
 
         # For multi-class XGBoost, shap_values is shape (n, n_features, n_classes)
-        shap_values = self._explainer.shap_values(X)
+        shap_values = self._explainer.shap_values(x_feat)
         shap_values = np.asarray(shap_values)
 
-        if shap_values.ndim == 3:
-            sv = shap_values[0, :, pred_idx]
-        else:
-            sv = shap_values[0]
+        sv = shap_values[0, :, pred_idx] if shap_values.ndim == 3 else shap_values[0]
 
         base = self._explainer.expected_value
         if isinstance(base, (list, np.ndarray)):

@@ -13,14 +13,13 @@ import pytest
 
 from zakkend import config
 from zakkend.agent.knowledge import (
+    FUNDING_SCHEMES,
+    INSPECTION_BODIES,
+    REMEDIATION_OPTIONS,
     get_applicable_funding,
     get_applicable_remediations,
     get_inspection_bodies,
-    REMEDIATION_OPTIONS,
-    FUNDING_SCHEMES,
-    INSPECTION_BODIES,
 )
-
 
 # ──────────────── Knowledge base tests ────────────────
 
@@ -76,6 +75,7 @@ class TestAgentGraph:
         if not config.MODEL_PATH.exists():
             from zakkend.data.synthetic import generate
             from zakkend.models.baseline import train
+
             model = train(generate(n=2_000))
             model.save()
 
@@ -113,6 +113,7 @@ class TestAgentGraph:
 
     def test_agent_produces_report(self, _ensure_model, high_risk_features):
         from zakkend.agent.graph import create_remediation_agent
+
         agent = create_remediation_agent()
         result = agent.invoke({"building_features": high_risk_features})
 
@@ -121,6 +122,7 @@ class TestAgentGraph:
 
     def test_report_contains_required_sections(self, _ensure_model, high_risk_features):
         from zakkend.agent.graph import create_remediation_agent
+
         agent = create_remediation_agent()
         result = agent.invoke({"building_features": high_risk_features})
 
@@ -131,12 +133,14 @@ class TestAgentGraph:
 
     def test_quality_check_passes(self, _ensure_model, high_risk_features):
         from zakkend.agent.graph import create_remediation_agent
+
         agent = create_remediation_agent()
         result = agent.invoke({"building_features": high_risk_features})
         assert result.get("quality_passed", False) is True
 
     def test_high_risk_mentions_urgency(self, _ensure_model, high_risk_features):
         from zakkend.agent.graph import create_remediation_agent
+
         agent = create_remediation_agent()
         result = agent.invoke({"building_features": high_risk_features})
         report_lower = result["report"].lower()
@@ -144,6 +148,7 @@ class TestAgentGraph:
 
     def test_report_includes_shap_drivers(self, _ensure_model, high_risk_features):
         from zakkend.agent.graph import create_remediation_agent
+
         agent = create_remediation_agent()
         result = agent.invoke({"building_features": high_risk_features})
         assert "shap_drivers" in result
@@ -151,6 +156,7 @@ class TestAgentGraph:
 
     def test_low_risk_gets_monitoring_recommendation(self, _ensure_model, low_risk_features):
         from zakkend.agent.graph import create_remediation_agent
+
         agent = create_remediation_agent()
         result = agent.invoke({"building_features": low_risk_features})
         report_lower = result["report"].lower()

@@ -84,14 +84,11 @@ def test_foundation_type_changes_prediction(client):
         payload = _sample_input() | {"foundation_type": foundation}
         r = client.post("/predict", json=payload)
         assert r.status_code == 200, r.text
-        probs = tuple(
-            round(p["probability"], 6)
-            for p in r.json()["class_probabilities"]
-        )
+        probs = tuple(round(p["probability"], 6) for p in r.json()["class_probabilities"])
         results.append(probs)
-    assert len(set(results)) > 1, (
-        "foundation_type has no effect on predictions — categorical encoding is broken"
-    )
+    assert (
+        len(set(results)) > 1
+    ), "foundation_type has no effect on predictions — categorical encoding is broken"
 
 
 def test_soil_type_changes_prediction(client):
@@ -101,14 +98,11 @@ def test_soil_type_changes_prediction(client):
         payload = _sample_input() | {"soil_type": soil}
         r = client.post("/predict", json=payload)
         assert r.status_code == 200, r.text
-        probs = tuple(
-            round(p["probability"], 6)
-            for p in r.json()["class_probabilities"]
-        )
+        probs = tuple(round(p["probability"], 6) for p in r.json()["class_probabilities"])
         results.append(probs)
-    assert len(set(results)) > 1, (
-        "soil_type has no effect on predictions — categorical encoding is broken"
-    )
+    assert (
+        len(set(results)) > 1
+    ), "soil_type has no effect on predictions — categorical encoding is broken"
 
 
 def test_unknown_foundation_type_returns_422(client):
@@ -129,9 +123,7 @@ def test_unknown_soil_type_returns_422(client):
     """Same guard for soil_type OOD values."""
     payload = _sample_input() | {"soil_type": "gravel"}
     r = client.post("/predict", json=payload)
-    assert r.status_code == 422, (
-        f"Expected 422 for unknown category, got {r.status_code}."
-    )
+    assert r.status_code == 422, f"Expected 422 for unknown category, got {r.status_code}."
 
 
 def test_high_risk_profile_predicts_higher_than_low(client):

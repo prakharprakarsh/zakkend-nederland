@@ -34,9 +34,6 @@ from langgraph.graph import END, StateGraph
 
 from zakkend import config
 from zakkend.agent.knowledge import (
-    FundingScheme,
-    InspectionBody,
-    RemediationOption,
     get_applicable_funding,
     get_applicable_remediations,
     get_inspection_bodies,
@@ -46,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 # ──────────────────────── State schema ─────────────────────────
+
 
 class AgentState(TypedDict, total=False):
     """Typed state flowing through the LangGraph pipeline."""
@@ -76,26 +74,28 @@ class AgentState(TypedDict, total=False):
 
 # ──────────────────────── Node: assess_risk ─────────────────────
 
+
 def assess_risk(state: AgentState) -> AgentState:
     """Run the XGBoost model + SHAP explainer on building features."""
     from zakkend.explain.shap_explainer import SubsidenceExplainer
     from zakkend.models.baseline import TrainedModel
 
     features = state["building_features"]
-    logger.info(f"Assessing risk for building: year={features.get('year_built')}, "
-                f"foundation={features.get('foundation_type')}, soil={features.get('soil_type')}")
+    logger.info(
+        f"Assessing risk for building: year={features.get('year_built')}, "
+        f"foundation={features.get('foundation_type')}, soil={features.get('soil_type')}"
+    )
 
     model = TrainedModel.load()
     explainer = SubsidenceExplainer(model)
 
     import pandas as pd
+
     df = pd.DataFrame([features])
     probs = model.predict_proba(df)[0]
     explanation = explainer.explain(df)
 
-    class_probs = {
-        name: float(p) for name, p in zip(model.class_names, probs)
-    }
+    class_probs = {name: float(p) for name, p in zip(model.class_names, probs, strict=False)}
 
     shap_drivers = [
         {
@@ -122,6 +122,7 @@ def assess_risk(state: AgentState) -> AgentState:
 
 # ──────────────────── Node: lookup_remediation ──────────────────
 
+
 def lookup_remediation(state: AgentState) -> AgentState:
     """Query the knowledge base for applicable remediation options."""
     risk_class = state["risk_class"]
@@ -129,8 +130,9 @@ def lookup_remediation(state: AgentState) -> AgentState:
     foundation = features.get("foundation_type", "unknown")
     soil = features.get("soil_type", "unknown")
 
-    logger.info(f"Looking up remediation for: risk={risk_class}, "
-                f"foundation={foundation}, soil={soil}")
+    logger.info(
+        f"Looking up remediation for: risk={risk_class}, " f"foundation={foundation}, soil={soil}"
+    )
 
     options = get_applicable_remediations(risk_class, foundation, soil)
     funding = get_applicable_funding(risk_class)
@@ -174,6 +176,7 @@ def lookup_remediation(state: AgentState) -> AgentState:
 
 # ──────────────────── Node: draft_report ────────────────────────
 
+
 def _risk_emoji(risk_class: str) -> str:
     return {"low": "🟢", "moderate": "🟡", "high": "🟠", "critical": "🔴"}.get(risk_class, "⚪")
 
@@ -183,15 +186,18 @@ def draft_report(state: AgentState) -> AgentState:
     # Check if an LLM API key is available
     has_llm = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY"))
 
-    if has_llm:
-        report = _draft_report_llm(state)
-    else:
-        report = _draft_report_template(state)
+    report = _draft_report_llm(state) if has_llm else _draft_report_template(state)
 
     # Track which sections are present
     sections = []
-    for section_name in ["RISK ASSESSMENT", "KEY RISK DRIVERS", "REMEDIATION",
-                          "FUNDING", "INSPECTION", "NEXT STEPS"]:
+    for section_name in [
+        "RISK ASSESSMENT",
+        "KEY RISK DRIVERS",
+        "REMEDIATION",
+        "FUNDING",
+        "INSPECTION",
+        "NEXT STEPS",
+    ]:
         if section_name in report.upper():
             sections.append(section_name)
 
@@ -256,6 +262,21 @@ def _draft_report_template(state: AgentState) -> str:
             f"- **{b['name']}** — {b['service_type']}. "
             f"{b['description']}. [{b['url']}]({b['url']})"
         )
+
+    step_2 = (
+        "**Contact the Nationaal Fonds Funderingsherstel** to discuss financing "
+        "options for foundation repair."
+        if risk_class in ("critical", "high")
+        else "**Monitor** the building for signs of settlement "
+        "(cracks, doors sticking, uneven floors)."
+    )
+    step_4 = (
+        "**Do not delay.** Foundation damage accelerates exponentially once it "
+        "begins. Early intervention is significantly cheaper than emergency repair."
+        if risk_class == "critical"
+        else "**Set up a monitoring programme** with tilt sensors and crack "
+        "monitors if visible signs appear."
+    )
 
     report = f"""# 🏚️ Foundation Subsidence Risk Report
 
@@ -327,12 +348,12 @@ per-prediction transparency in compliance with EU AI Act Article 13.
 1. **Commission a foundation inspection** (F3O protocol) through a
    KCAF-certified inspector. Cost: typically €1,500–€3,500.
 
-2. {"**Contact the Nationaal Fonds Funderingsherstel** to discuss financing options for foundation repair." if risk_class in ("critical", "high") else "**Monitor** the building for signs of settlement (cracks, doors sticking, uneven floors)."}
+2. {step_2}
 
 3. **Contact your municipality** to ask about local subsidence programmes
    and whether your neighborhood is eligible for collective repair schemes.
 
-4. {"**Do not delay.** Foundation damage accelerates exponentially once it begins. Early intervention is significantly cheaper than emergency repair." if risk_class == "critical" else "**Set up a monitoring programme** with tilt sensors and crack monitors if visible signs appear."}
+4. {step_4}
 
 ---
 
@@ -360,12 +381,13 @@ def _draft_report_llm(state: AgentState) -> str:
         options = state["remediation_options"]
         funding = state["funding_schemes"]
 
-        prompt = f"""You are a Dutch foundation engineering expert writing a remediation 
+        prompt = f"""You are a Dutch foundation engineering expert writing a remediation
 report for a homeowner. Be professional, clear, and empathetic.
 
-Building: year={features.get('year_built')}, foundation={features.get('foundation_type')}, 
+Building: year={features.get('year_built')}, foundation={features.get('foundation_type')},
 soil={features.get('soil_type')}, peat={features.get('peat_thickness_m')}m,
-groundwater={features.get('groundwater_depth_m')}m, InSAR={features.get('insar_deformation_mm_yr')} mm/yr
+groundwater={features.get('groundwater_depth_m')}m,
+InSAR={features.get('insar_deformation_mm_yr')} mm/yr
 
 Risk class: {risk_class} (score: {state['risk_score']})
 Top SHAP drivers: {drivers}
@@ -396,8 +418,14 @@ Use markdown formatting. Be specific to Dutch context."""
 
 # ──────────────────── Node: quality_check ───────────────────────
 
-REQUIRED_SECTIONS = ["RISK ASSESSMENT", "KEY RISK DRIVERS", "REMEDIATION",
-                     "FUNDING", "INSPECTION", "NEXT STEPS"]
+REQUIRED_SECTIONS = [
+    "RISK ASSESSMENT",
+    "KEY RISK DRIVERS",
+    "REMEDIATION",
+    "FUNDING",
+    "INSPECTION",
+    "NEXT STEPS",
+]
 
 
 def quality_check(state: AgentState) -> AgentState:
@@ -423,6 +451,7 @@ def quality_check(state: AgentState) -> AgentState:
 
 # ──────────────────── Conditional edge ──────────────────────────
 
+
 def should_redraft(state: AgentState) -> str:
     """Route: retry draft if quality check failed (max 2 iterations)."""
     if state.get("quality_passed", False):
@@ -434,6 +463,7 @@ def should_redraft(state: AgentState) -> str:
 
 
 # ──────────────────── Graph construction ────────────────────────
+
 
 def create_remediation_agent() -> StateGraph:
     """Build and compile the LangGraph remediation agent.

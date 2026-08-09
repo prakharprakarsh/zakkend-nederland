@@ -50,9 +50,7 @@ def build_feature_matrix(
         allowed = category_levels[col]
         unseen = sorted(set(values) - set(allowed))
         if unseen:
-            raise UnknownCategoryError(
-                f"{col}: {unseen} not in training vocabulary {allowed}"
-            )
+            raise UnknownCategoryError(f"{col}: {unseen} not in training vocabulary {allowed}")
         features[col] = pd.Categorical(values, categories=allowed)
     return features
 
