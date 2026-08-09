@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
-    { name = "Prakhar Prakarsh", email = "prakhar@example.com" },
+    { name = "Prakhar Prakarsh", email = "prakharprakarsh@gmail.com" },
 ]
 keywords = ["machine-learning", "geospatial", "netherlands", "subsidence", "xgboost", "shap"]
 classifiers = [
