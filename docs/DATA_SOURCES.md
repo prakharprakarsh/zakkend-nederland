@@ -44,7 +44,7 @@ All data sources used or planned are **open and Dutch-official**.
 
 - Source: Kenniscentrum Aanpak Funderingsproblematiek, via research partnerships
 - Access: On request for research; aggregated municipal data is public
-- Use: model calibration + skill verification
+- Use: real-world skill verification (comparison against known damage outcomes)
 
 ## Refresh cadence
 

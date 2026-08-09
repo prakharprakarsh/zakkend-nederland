@@ -49,24 +49,27 @@ FastAPI for two reasons: Pydantic v2 gives us range-validated inputs for free,
 and automatic OpenAPI docs (`/docs`) make the system easy for recruiters to
 click through.
 
-## Phase 2 hook points
+## Phase 2 integration points (shipped)
 
-The codebase is deliberately structured so Phase 2 requires changes in exactly
-three places:
+Phase 2 is complete. The codebase was structured so real-data integration
+required changes in exactly three places:
 
 1. `data/bag.py`, `data/insar.py`, `data/soil.py`, `data/weather.py`
-   — implement real loaders (they already exist as stubs)
-2. `scripts/train.py` — swap `generate()` for a real-data ETL
-3. Nothing else. Feature engineering, model, API, and UI remain untouched.
+   — real loaders implemented (BAG WFS; coordinate/RNG estimators for the rest)
+2. `scripts/train.py` — `fetch_and_train.py` added for real-data ETL
+3. Nothing else. Feature engineering, model, API, and UI were untouched.
 
-## Why synthetic data for Phase 1
+## Why synthetic data for Phase 1 (and still for training)
 
-Recruiters want to see end-to-end ML systems that work. Starting with
-synthetic data that encodes published domain dynamics means:
+Starting with synthetic data that encodes published domain dynamics means:
 
-- The pipeline is fully testable before real data arrives
-- A reproducible demo works on every machine without credentials
-- The model learns transferable patterns (peat + wooden pile + drought → risk)
+- The demo is fully reproducible on any machine without credentials or API access
+- The model learns domain patterns (peat + wooden pile + drought → risk)
   rather than memorising a one-off dataset
+- CI can regenerate training metrics deterministically (RANDOM_STATE = 42)
 
-Real-data calibration (vs. KCAF's known-damage dataset) is Phase 5.
+The current trained model still uses synthetic labels. The transition to real
+supervision is the primary goal of Phase 5; see `docs/LIMITATIONS.md §L1`.
+
+Validation against KCAF's known-damage dataset (to measure real-world predictive skill,
+as opposed to the current rule-recovery metric) is Phase 5.
