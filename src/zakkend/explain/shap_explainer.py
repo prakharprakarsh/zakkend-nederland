@@ -52,7 +52,7 @@ class SubsidenceExplainer:
         if len(row) != 1:
             raise ValueError("Explain one row at a time.")
 
-        X = build_feature_matrix(row)
+        X = build_feature_matrix(row, category_levels=self.model.category_levels)
         probs = self.model.classifier.predict_proba(X)[0]
         pred_idx = int(probs.argmax())
 
