@@ -122,10 +122,7 @@ def _estimate_foundation(df: pd.DataFrame) -> pd.DataFrame:
         foundations.append(f)
 
     result["foundation_type"] = foundations
-    logger.info(
-        f"Foundation estimation:\n"
-        f"{pd.Series(foundations).value_counts().to_string()}"
-    )
+    logger.info(f"Foundation estimation:\n" f"{pd.Series(foundations).value_counts().to_string()}")
 
     return result
 
@@ -137,11 +134,15 @@ def _estimate_spatial_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Distance to nearest water body (canals are everywhere in western NL)
     is_western = result["lon"] < 5.0
-    result["distance_to_water_m"] = np.where(
-        is_western,
-        rng.exponential(200, len(result)),
-        rng.exponential(800, len(result)),
-    ).clip(5, 5000).astype(int)
+    result["distance_to_water_m"] = (
+        np.where(
+            is_western,
+            rng.exponential(200, len(result)),
+            rng.exponential(800, len(result)),
+        )
+        .clip(5, 5000)
+        .astype(int)
+    )
 
     # Neighborhood damage rate: spatial hash for spatial autocorrelation
     lat_hash = np.floor(result["lat"].values * 50)
@@ -158,9 +159,7 @@ def _estimate_spatial_features(df: pd.DataFrame) -> pd.DataFrame:
         else:
             rate_lookup[h] = float(rng.beta(1, 12))  # lower
 
-    result["neighborhood_damage_rate"] = [
-        round(rate_lookup[h], 3) for h in neigh_hash
-    ]
+    result["neighborhood_damage_rate"] = [round(rate_lookup[h], 3) for h in neigh_hash]
 
     return result
 
@@ -181,10 +180,7 @@ def _harmonize_to_schema(df: pd.DataFrame) -> pd.DataFrame:
             result[col] = result[col].astype("category")
 
     # Keep only the columns the model needs + metadata
-    keep_cols = (
-        ["identificatie", "lat", "lon", "municipality"]
-        + config.FEATURE_COLUMNS
-    )
+    keep_cols = ["identificatie", "lat", "lon", "municipality"] + config.FEATURE_COLUMNS
     available = [c for c in keep_cols if c in result.columns]
     return result[available]
 

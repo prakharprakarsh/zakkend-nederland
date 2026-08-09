@@ -132,9 +132,7 @@ def fetch_buildings_bbox(
         )
 
         try:
-            resp = requests.get(
-                config.PDOK_BAG_WFS, params=params, timeout=_WFS_TIMEOUT
-            )
+            resp = requests.get(config.PDOK_BAG_WFS, params=params, timeout=_WFS_TIMEOUT)
             resp.raise_for_status()
         except requests.RequestException as e:
             logger.error(f"PDOK WFS request failed: {e}")
@@ -175,9 +173,7 @@ def fetch_buildings_municipality(
     muni = config.TARGET_MUNICIPALITIES.get(municipality_name)
     if not muni:
         available = ", ".join(config.TARGET_MUNICIPALITIES.keys())
-        raise ValueError(
-            f"Unknown municipality '{municipality_name}'. Available: {available}"
-        )
+        raise ValueError(f"Unknown municipality '{municipality_name}'. Available: {available}")
 
     lon_min, lat_min, lon_max, lat_max = muni["bbox"]
     logger.info(f"Fetching buildings for {municipality_name} (bbox: {muni['bbox']})")
