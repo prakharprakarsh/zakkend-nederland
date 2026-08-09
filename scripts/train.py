@@ -23,7 +23,6 @@ from sklearn.model_selection import train_test_split
 
 from zakkend import config
 from zakkend.data.synthetic import generate as generate_synthetic
-from zakkend.data.synthetic import generate_for_municipality
 from zakkend.models.baseline import train
 
 
@@ -64,6 +63,17 @@ def _print_metrics(model: object, label: str = "") -> None:
     if "municipality_split" in m:
         ms = m["municipality_split"]
         print(f"Municipality split — train: {ms.get('train')}  test: {ms.get('test')}")
+    if "evaluation_notes" in m:
+        print("\n⚠  Evaluation notes:")
+        for key, info in m["evaluation_notes"].items():
+            if key == "class_coverage_fix":
+                print(f"  class_coverage_fix: {info['note']}")
+            else:
+                print(
+                    f"  {key}: unseen={info['unseen_in_test']}"
+                    f"  training_vocab={info['training_vocabulary']}"
+                )
+                print(f"    → {info['note']}")
     print("\nPer-class performance:")
     for cls, pc in m["per_class"].items():
         print(
@@ -178,20 +188,63 @@ def main() -> None:
 
     else:
         # ─── Grouped / municipality-based spatial holdout ───
-        print("\n→ Grouped split: train=Gouda+Rotterdam+Zaanstad, test=Dordrecht")
+        # Uses data/processed/real_data.parquet (real PDOK BAG buildings).
+        real_path = config.PROCESSED_DATA_DIR / "real_data.parquet"
+        if not real_path.exists():
+            print(f"✗ {real_path} not found. Run scripts/fetch_and_train.py first.")
+            return
+
+        print(f"\n→ Grouped split: loading real data from {real_path}")
+        real_df = pd.read_parquet(real_path)
+        print("  Municipality distribution:")
+        for muni, count in real_df["municipality"].value_counts().items():
+            print(f"    {muni}: {count:,} buildings")
+
         train_munis = ["Gouda", "Rotterdam", "Zaanstad"]
         test_muni = "Dordrecht"
 
-        train_frames = [generate_for_municipality(m, n=2_500) for m in train_munis]
-        train_concat = pd.concat(train_frames, ignore_index=True)
-        dordrecht_df = generate_for_municipality(test_muni, n=2_500)
+        train_raw = real_df[real_df["municipality"].isin(train_munis)].copy()
+        dordrecht_raw = real_df[real_df["municipality"] == test_muni].copy()
 
-        print(f"  Training pool: {len(train_concat):,} rows")
-        print(f"  Test set:      {len(dordrecht_df):,} rows")
+        # Label with rule engine (no ground-truth labels in real data).
+        print("→ Applying rule-engine labels to real data...")
+        train_labeled = _label_real_data(train_raw)
+        dordrecht_labeled = _label_real_data(dordrecht_raw)
 
-        # Build train/val split from the concatenated training data.
+        print(f"  Training pool ({', '.join(train_munis)}): {len(train_labeled):,} rows")
+        print(f"  Soil types in training: {dict(train_labeled['soil_type'].value_counts())}")
+        print("  Class distribution in training:")
+        for cls, n in train_labeled["risk_class"].value_counts().items():
+            print(f"    {cls}: {n}")
+        print(f"  Test set ({test_muni}): {len(dordrecht_labeled):,} rows")
+        print(f"  Soil types in test:     {dict(dordrecht_labeled['soil_type'].value_counts())}")
+        print("  Class distribution in test:")
+        for cls, n in dordrecht_labeled["risk_class"].value_counts().items():
+            print(f"    {cls}: {n}")
+
+        # XGBoost 3.x sklearn wrapper requires labels [0..n_classes-1] contiguous.
+        # Peat-zone municipalities (Gouda/Rotterdam/Zaanstad) produce no 'low'-class
+        # buildings under the rule engine. Add 1 synthetic anchor row per missing
+        # class to satisfy the constraint. Documented in evaluation_notes.
+        present = set(train_labeled["risk_class"].unique())
+        missing_classes = [c for c in config.RISK_CLASSES if c not in present]
+        anchor_rows_added = 0
+        if missing_classes:
+            print(f"\n  ⚠ Training classes missing: {missing_classes}")
+            print("    Adding 1 synthetic anchor row per missing class...")
+            syn_pool = generate_synthetic(n=50_000)
+            for cls_name in missing_classes:
+                anchor = syn_pool[syn_pool["risk_class"] == cls_name].iloc[:1]
+                train_labeled = pd.concat([train_labeled, anchor], ignore_index=True)
+                anchor_rows_added += 1
+            print(
+                f"    Training set after anchors: {len(train_labeled):,} rows "
+                f"({anchor_rows_added} synthetic, {len(train_labeled) - anchor_rows_added} real)"
+            )
+
+        # Build train/val split from the concatenated training municipalities.
         train_core_df, val_df_df = train_test_split(
-            train_concat,
+            train_labeled,
             test_size=0.20,
             random_state=config.RANDOM_STATE,
         )
@@ -199,8 +252,10 @@ def main() -> None:
         model = train(
             train_core_df,
             val_df=val_df_df,
-            test_df=dordrecht_df,
+            test_df=dordrecht_labeled,
             municipality_split={"train": train_munis, "test": [test_muni]},
+            anchor_rows_added=anchor_rows_added,
+            anchor_classes_added=missing_classes,
         )
 
     # ─── Save model ───

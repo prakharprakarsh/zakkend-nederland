@@ -68,71 +68,71 @@
     }
   },
   "grouped_split": {
-    "accuracy": 0.6944,
-    "macro_f1": 0.6346475627309337,
-    "weighted_f1": 0.6838776083427066,
+    "accuracy": 0.18275154004106775,
+    "macro_f1": 0.08984401151502978,
+    "weighted_f1": 0.05793641989030176,
     "per_class": {
       "low": {
-        "precision": 0.43272727272727274,
-        "recall": 0.7,
-        "f1": 0.5348314606741573,
-        "support": 170
+        "precision": 0.18209876543209877,
+        "recall": 1.0,
+        "f1": 0.30809399477806787,
+        "support": 177
       },
       "moderate": {
-        "precision": 0.724293059125964,
-        "recall": 0.8736434108527131,
-        "f1": 0.791988756148981,
-        "support": 1290
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 632
       },
       "high": {
-        "precision": 0.6177156177156177,
-        "recall": 0.40212443095599393,
-        "f1": 0.48713235294117646,
-        "support": 659
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 128
       },
       "critical": {
-        "precision": 0.9375,
-        "recall": 0.5905511811023622,
-        "f1": 0.7246376811594203,
-        "support": 381
+        "precision": 0.5,
+        "recall": 0.02702702702702703,
+        "f1": 0.05128205128205128,
+        "support": 37
       }
     },
     "confusion_matrix": [
       [
-        119,
-        51,
+        177,
+        0,
         0,
         0
       ],
       [
-        155,
-        1127,
-        8,
+        632,
+        0,
+        0,
         0
       ],
       [
-        1,
-        378,
-        265,
-        15
+        127,
+        0,
+        0,
+        1
       ],
       [
+        36,
         0,
         0,
-        156,
-        225
+        1
       ]
     ],
-    "n_train": 6000,
-    "n_val": 1500,
-    "n_test": 2500,
-    "best_iteration": 299,
+    "n_train": 2284,
+    "n_val": 571,
+    "n_test": 974,
+    "best_iteration": 106,
     "sample_weighted": true,
     "baselines": {
-      "most_frequent": 0.2636,
-      "prior": 0.2636,
-      "stratified": 0.2968,
-      "uniform": 0.2384
+      "most_frequent": 0.038,
+      "prior": 0.038,
+      "stratified": 0.0924,
+      "uniform": 0.2248
     },
     "municipality_split": {
       "train": [
@@ -143,6 +143,25 @@
       "test": [
         "Dordrecht"
       ]
+    },
+    "evaluation_notes": {
+      "soil_type": {
+        "unseen_in_test": [
+          "sandy_clay"
+        ],
+        "training_vocabulary": [
+          "peat",
+          "sand"
+        ],
+        "note": "Test rows with soil_type in ['sandy_clay'] are not in the training vocabulary ['peat', 'sand']. They are encoded as NaN and handled by XGBoost's missing-value split. The reported accuracy conflates geographic distribution shift with unseen-category coverage; these effects cannot be separated from this evaluation alone."
+      },
+      "class_coverage_fix": {
+        "anchor_rows_added": 1,
+        "classes_added": [
+          "low"
+        ],
+        "note": "Training data lacked ['low'] class(es). 1 synthetic anchor row(s) were added to satisfy XGBoost's contiguous-class-label requirement. The model has effectively 0 real training examples for these classes."
+      }
     }
   }
 }

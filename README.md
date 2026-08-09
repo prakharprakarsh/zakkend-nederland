@@ -211,25 +211,42 @@ critical(334)│   0  │   0  │  49  │ 285  │
 
 ---
 
-### Grouped split (municipality spatial holdout)
+### Grouped split (municipality spatial holdout — real PDOK BAG data)
 
-Train: Gouda + Rotterdam + Zaanstad (6,000 rows). Test: Dordrecht (2,500 rows).
-This evaluates whether the model generalises across municipalities — a harder test than
-the stratified random split because `neighborhood_damage_rate` cannot leak between cities.
+Train: 2,854 real buildings from Gouda + Rotterdam + Zaanstad.
+Test: 974 real buildings from Dordrecht (`data/processed/real_data.parquet`).
 
-**Overall:** accuracy 69.4% · macro F1 0.635 · weighted F1 0.684
+**Overall:** accuracy **18.3%** · macro F1 0.090 · weighted F1 0.058
 
 | Class | Precision | Recall | F1 | Support |
 |-------|-----------|--------|----|---------|
-| low | 43.3% | 70.0% | **53.5%** | 170 |
-| moderate | 72.4% | 87.4% | 79.2% | 1290 |
-| high | 61.8% | 40.2% | **48.7%** | 659 |
-| critical | 93.8% | 59.1% | 72.5% | 381 |
+| low | 18.2% | 100.0% | 30.8% | 177 |
+| moderate | 0.0% | 0.0% | **0.0%** | 632 |
+| high | 0.0% | 0.0% | **0.0%** | 128 |
+| critical | 50.0% | 2.7% | 5.1% | 37 |
 
-The 13 pp accuracy drop from random to grouped split is the expected cost of spatial
-leakage removal. `high` recall collapses to 40% — the model under-predicts the hardest
-class when trained on a different city's distribution. This is the honest number for
-cross-city generalisability on synthetic data.
+**This number is not a meaningful cross-municipality generalisability score.** It measures
+model failure under two simultaneous confounds that cannot be separated:
+
+1. **Feature domain gap.** Every training building has `soil_type = peat`; every Dordrecht
+   building has `soil_type = sandy_clay`, which was absent from training. All 974 test rows
+   are encoded as NaN for soil_type and routed through XGBoost's missing-value branch,
+   which defaults to predicting `low` for everything.
+
+2. **Class distribution mismatch.** The rule engine assigns training buildings 75% `critical`,
+   39% `high`, 1% `moderate` — because peat + wooden pile = very high risk. Dordrecht's
+   label distribution is the opposite: 65% `moderate`, 18% `low`. The model was trained on
+   a class distribution it never encountered at test time, and it had zero real training
+   examples of `low` (1 synthetic anchor row was added to satisfy XGBoost's class range
+   requirement).
+
+**Baselines on Dordrecht test set** (DummyClassifier trained on same training data):
+`most_frequent` (always predicts `critical`) = **3.8%** · `uniform` = **22.5%**
+
+The model (18.3%) does not beat uniform random on this split. This is the honest number
+and is worth reporting: the real PDOK data reveals that the training municipalities
+(peat zone, high-risk) and Dordrecht (sandy clay, lower-risk) are so different under the
+rule engine that the grouped split cannot isolate generalisation from data coverage failure.
 
 ## Roadmap
 
