@@ -6,13 +6,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from zakkend import config
 from zakkend.explain.shap_explainer import SubsidenceExplainer
+from zakkend.features.engineering import UnknownCategoryError
 from zakkend.models.baseline import TrainedModel
 
 # ───────────────────────────── Models in memory ─────────────────────────
@@ -40,6 +41,11 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(UnknownCategoryError)
+async def unknown_category_handler(request: Request, exc: UnknownCategoryError) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

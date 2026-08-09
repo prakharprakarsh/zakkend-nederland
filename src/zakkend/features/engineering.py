@@ -7,12 +7,33 @@ import pandas as pd
 from zakkend import config
 
 
-def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
-    """Select + one-hot encode features for modelling.
+class UnknownCategoryError(ValueError):
+    """Raised when an inference-time category value was not seen during training."""
 
-    The XGBoost pipeline handles the categorical encoding internally when
-    `enable_categorical=True` is set, but we normalize dtypes here for safety
-    and to keep the API input validation aligned with training-time schema.
+
+def build_feature_matrix(
+    df: pd.DataFrame,
+    *,
+    category_levels: dict[str, list[str]],
+) -> pd.DataFrame:
+    """Select and encode features for modelling.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Raw input frame containing at least `config.FEATURE_COLUMNS`.
+    category_levels : dict[str, list[str]]
+        Vocabulary captured at training time, keyed by column name.
+        Must be passed explicitly — callers that omit it get a TypeError,
+        not a silent fallback that reproduces the 1-row encoding bug.
+
+    Raises
+    ------
+    ValueError
+        If required feature columns are missing or `category_levels` lacks
+        an entry for a categorical column.
+    UnknownCategoryError
+        If an inference-time value is not in the training vocabulary.
     """
     missing = set(config.FEATURE_COLUMNS) - set(df.columns)
     if missing:
@@ -20,7 +41,19 @@ def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
 
     features = df[config.FEATURE_COLUMNS].copy()
     for col in config.CATEGORICAL_FEATURES:
-        features[col] = features[col].astype("category")
+        values = features[col].astype(str)
+        if col not in category_levels:
+            raise ValueError(
+                f"category_levels is missing an entry for '{col}'. "
+                "Pass the vocabulary captured at training time."
+            )
+        allowed = category_levels[col]
+        unseen = sorted(set(values) - set(allowed))
+        if unseen:
+            raise UnknownCategoryError(
+                f"{col}: {unseen} not in training vocabulary {allowed}"
+            )
+        features[col] = pd.Categorical(values, categories=allowed)
     return features
 
 

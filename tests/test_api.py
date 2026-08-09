@@ -72,6 +72,68 @@ def test_predict_validates_ranges(client):
     assert r.status_code == 422
 
 
+def test_foundation_type_changes_prediction(client):
+    """Guards against train/serve category-encoding skew — foundation_type.
+
+    On XGBoost 2.x, .astype("category") on a 1-row frame collapsed every value
+    to code 0, making all four results identical. On 3.x (name-based lookup) this
+    works correctly; this test locks that in.
+    """
+    results = []
+    for foundation in ["wooden_pile", "concrete_pile", "strip", "slab"]:
+        payload = _sample_input() | {"foundation_type": foundation}
+        r = client.post("/predict", json=payload)
+        assert r.status_code == 200, r.text
+        probs = tuple(
+            round(p["probability"], 6)
+            for p in r.json()["class_probabilities"]
+        )
+        results.append(probs)
+    assert len(set(results)) > 1, (
+        "foundation_type has no effect on predictions — categorical encoding is broken"
+    )
+
+
+def test_soil_type_changes_prediction(client):
+    """Guards against train/serve category-encoding skew — soil_type."""
+    results = []
+    for soil in ["peat", "clay", "sandy_clay", "sand", "loess"]:
+        payload = _sample_input() | {"soil_type": soil}
+        r = client.post("/predict", json=payload)
+        assert r.status_code == 200, r.text
+        probs = tuple(
+            round(p["probability"], 6)
+            for p in r.json()["class_probabilities"]
+        )
+        results.append(probs)
+    assert len(set(results)) > 1, (
+        "soil_type has no effect on predictions — categorical encoding is broken"
+    )
+
+
+def test_unknown_foundation_type_returns_422(client):
+    """An out-of-vocabulary category must be rejected with 422, not a 500 stack trace.
+
+    Without vocabulary freezing, XGBoost raises a raw XGBoostError which FastAPI
+    surfaces as a 500. After the fix, UnknownCategoryError is caught and mapped to 422.
+    """
+    payload = _sample_input() | {"foundation_type": "banana"}
+    r = client.post("/predict", json=payload)
+    assert r.status_code == 422, (
+        f"Expected 422 for unknown category, got {r.status_code}. "
+        "UnknownCategoryError is not being caught before XGBoost sees the value."
+    )
+
+
+def test_unknown_soil_type_returns_422(client):
+    """Same guard for soil_type OOD values."""
+    payload = _sample_input() | {"soil_type": "gravel"}
+    r = client.post("/predict", json=payload)
+    assert r.status_code == 422, (
+        f"Expected 422 for unknown category, got {r.status_code}."
+    )
+
+
 def test_high_risk_profile_predicts_higher_than_low(client):
     low = _sample_input() | {
         "year_built": 2015,

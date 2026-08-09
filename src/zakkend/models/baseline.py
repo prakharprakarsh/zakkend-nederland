@@ -24,10 +24,11 @@ class TrainedModel:
     feature_columns: list[str]
     categorical_features: list[str]
     class_names: list[str]
+    category_levels: dict[str, list[str]] = field(default_factory=dict)
     metrics: dict[str, Any] = field(default_factory=dict)
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
-        X_ready = build_feature_matrix(X)
+        X_ready = build_feature_matrix(X, category_levels=self.category_levels)
         return self.classifier.predict_proba(X_ready)
 
     def predict_class(self, X: pd.DataFrame) -> np.ndarray:
@@ -73,7 +74,12 @@ def train(
     Expects `df` to contain every column in `config.FEATURE_COLUMNS`
     plus the target `config.TARGET_COLUMN`.
     """
-    X = build_feature_matrix(df)
+    category_levels = {
+        col: sorted(df[col].astype(str).unique().tolist())
+        for col in config.CATEGORICAL_FEATURES
+    }
+
+    X = build_feature_matrix(df, category_levels=category_levels)
     y = encode_risk_class(df[config.TARGET_COLUMN])
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -115,5 +121,6 @@ def train(
         feature_columns=config.FEATURE_COLUMNS,
         categorical_features=config.CATEGORICAL_FEATURES,
         class_names=list(config.RISK_CLASSES),
+        category_levels=category_levels,
         metrics=metrics,
     )

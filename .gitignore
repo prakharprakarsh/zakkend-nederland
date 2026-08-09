@@ -68,3 +68,9 @@ logs/
 
 # OS
 Thumbs.db
+
+# Local deploy_hf.py output — spaces/ is assembled at deploy time, not committed (see §1.8)
+spaces/src/
+spaces/models/
+spaces/data/
+spaces/.gitattributes
