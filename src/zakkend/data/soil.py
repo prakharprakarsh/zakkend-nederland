@@ -116,9 +116,7 @@ def try_pdok_bro_soil(lat: float, lon: float) -> str | None:
     }
 
     try:
-        resp = requests.get(
-            config.PDOK_BRO_SOIL_WFS, params=params, timeout=_SOIL_WFS_TIMEOUT
-        )
+        resp = requests.get(config.PDOK_BRO_SOIL_WFS, params=params, timeout=_SOIL_WFS_TIMEOUT)
         resp.raise_for_status()
         data = resp.json()
         features = data.get("features", [])

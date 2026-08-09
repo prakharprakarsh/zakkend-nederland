@@ -59,10 +59,10 @@ def _estimate_drought_exposure(lat: float, lon: float, soil_type: str) -> float:
 
     # Soil vulnerability multiplier
     soil_factor = {
-        "peat": 1.25,    # peat shrinks irreversibly
-        "clay": 1.05,    # clay shrinks but rebounds partially
+        "peat": 1.25,  # peat shrinks irreversibly
+        "clay": 1.05,  # clay shrinks but rebounds partially
         "sandy_clay": 0.95,
-        "sand": 0.80,    # sand drains but doesn't shrink
+        "sand": 0.80,  # sand drains but doesn't shrink
         "loess": 0.90,
     }.get(soil_type, 1.0)
     base *= soil_factor

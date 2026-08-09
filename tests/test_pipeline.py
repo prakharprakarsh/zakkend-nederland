@@ -11,14 +11,12 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from zakkend import config
 from zakkend.data.bag import _extract_centroid, _features_to_dataframe
 from zakkend.data.insar import _estimate_insar_deformation
-from zakkend.data.soil import _classify_soil_by_coordinates, _bro_code_to_simple
+from zakkend.data.soil import _bro_code_to_simple, _classify_soil_by_coordinates
 from zakkend.data.weather import _estimate_drought_exposure
-
 
 # ──────────────────── BAG parser tests ────────────────────
 
@@ -27,7 +25,9 @@ class TestBAGParser:
     def test_extract_centroid_polygon(self):
         geom = {
             "type": "Polygon",
-            "coordinates": [[[4.70, 52.01], [4.72, 52.01], [4.72, 52.03], [4.70, 52.03], [4.70, 52.01]]],
+            "coordinates": [
+                [[4.70, 52.01], [4.72, 52.01], [4.72, 52.03], [4.70, 52.03], [4.70, 52.01]]
+            ],
         }
         lon, lat = _extract_centroid(geom)
         assert 4.70 <= lon <= 4.72
@@ -66,8 +66,13 @@ class TestBAGParser:
 
     def test_deduplication(self):
         feat = {
-            "properties": {"identificatie": "SAME", "bouwjaar": 1950, "oppervlakte": 60,
-                           "gebruiksdoel": "woonfunctie", "status": "Pand in gebruik"},
+            "properties": {
+                "identificatie": "SAME",
+                "bouwjaar": 1950,
+                "oppervlakte": 60,
+                "gebruiksdoel": "woonfunctie",
+                "status": "Pand in gebruik",
+            },
             "geometry": {"type": "Point", "coordinates": [4.71, 52.02]},
         }
         df = _features_to_dataframe([feat, feat, feat])
@@ -119,10 +124,7 @@ class TestInSAR:
 
     def test_gouda_high_subsidence(self):
         """Gouda should have 3-8 mm/yr subsidence (BDK published)."""
-        values = [
-            _estimate_insar_deformation(52.01, 4.71, "peat", 1920)
-            for _ in range(10)
-        ]
+        values = [_estimate_insar_deformation(52.01, 4.71, "peat", 1920) for _ in range(10)]
         mean_val = np.mean(values)
         assert 1.5 < mean_val < 12, f"Gouda mean InSAR {mean_val} outside expected range"
 
@@ -133,8 +135,6 @@ class TestInSAR:
 
     def test_peat_higher_than_sand(self):
         """Same location concept: peat soil should subside more."""
-        peat = _estimate_insar_deformation(52.1, 4.9, "peat", 1950)
-        sand = _estimate_insar_deformation(52.1, 4.9, "sand", 1950)
         # Due to randomness, just check on average
         peat_vals = [_estimate_insar_deformation(52.1, 4.9, "peat", 1950) for _ in range(20)]
         sand_vals = [_estimate_insar_deformation(52.1, 4.9, "sand", 1950) for _ in range(20)]
@@ -168,13 +168,13 @@ class TestPipelineSchema:
 
     def test_harmonized_schema_has_all_feature_columns(self):
         """Create a minimal mock BAG-like df and run through enrichment."""
+        from zakkend.data.insar import enrich_with_insar
         from zakkend.data.pipeline import (
             _estimate_foundation,
             _estimate_groundwater,
             _estimate_spatial_features,
             _harmonize_to_schema,
         )
-        from zakkend.data.insar import enrich_with_insar
         from zakkend.data.soil import enrich_with_soil
         from zakkend.data.weather import enrich_with_drought
 

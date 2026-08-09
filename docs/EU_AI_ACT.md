@@ -17,7 +17,9 @@ property-damage risk score provided to consumers sits in a **grey zone**:
 
 Every `/explain` call returns:
 
-1. The predicted class + calibrated probabilities
+1. The predicted class + class probabilities (raw XGBoost softmax outputs —
+   isotonic regression or Platt calibration is not yet implemented; `P(critical) = 0.85`
+   should be read as a relative confidence score, not a frequency estimate)
 2. The base expected value (class prior)
 3. Top-5 SHAP feature contributions with direction and magnitude
 4. Feature-level input echo so the caller can audit what was used
@@ -25,12 +27,19 @@ Every `/explain` call returns:
 This satisfies the substantive core of Article 13: an affected person can
 understand, in non-technical terms, *why* a specific output was produced.
 
+**Current gap:** SHAP explanations are computed on a model whose labels are
+synthetic (rule-engine-derived), not real-world ground truth. Feature attributions
+are therefore interpretable as "what drives the rule engine's output", not "what
+causes real foundation damage". This gap is documented in `docs/LIMITATIONS.md`.
+
 ## Article 15 — Accuracy, robustness and cybersecurity
 
 - Training metrics are persisted alongside the model (`models/metrics.json`)
 - Tests validate both schema and domain-level sanity (e.g. peat homes score
   higher on average; older wooden-pile homes score higher than new concrete)
-- Pydantic range validation blocks out-of-distribution inputs
+- Pydantic range validation blocks out-of-range numeric inputs; out-of-vocabulary
+  categorical values are caught by `UnknownCategoryError` and returned as HTTP 422
+  before reaching the model
 
 ## Article 10 — Data governance
 

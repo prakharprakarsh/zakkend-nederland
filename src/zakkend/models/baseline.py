@@ -24,14 +24,15 @@ class TrainedModel:
     feature_columns: list[str]
     categorical_features: list[str]
     class_names: list[str]
+    category_levels: dict[str, list[str]] = field(default_factory=dict)
     metrics: dict[str, Any] = field(default_factory=dict)
 
-    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
-        X_ready = build_feature_matrix(X)
-        return self.classifier.predict_proba(X_ready)
+    def predict_proba(self, df: pd.DataFrame) -> np.ndarray:
+        x_ready = build_feature_matrix(df, category_levels=self.category_levels)
+        return self.classifier.predict_proba(x_ready)
 
-    def predict_class(self, X: pd.DataFrame) -> np.ndarray:
-        probs = self.predict_proba(X)
+    def predict_class(self, df: pd.DataFrame) -> np.ndarray:
+        probs = self.predict_proba(df)
         idx = probs.argmax(axis=1)
         return np.array([self.class_names[i] for i in idx])
 
@@ -40,7 +41,7 @@ class TrainedModel:
         joblib.dump(self, path)
 
     @classmethod
-    def load(cls, path=None) -> "TrainedModel":
+    def load(cls, path=None) -> TrainedModel:
         path = path or config.MODEL_PATH
         return joblib.load(path)
 
@@ -73,20 +74,25 @@ def train(
     Expects `df` to contain every column in `config.FEATURE_COLUMNS`
     plus the target `config.TARGET_COLUMN`.
     """
-    X = build_feature_matrix(df)
+    category_levels = {
+        col: sorted(df[col].astype(str).unique().tolist()) for col in config.CATEGORICAL_FEATURES
+    }
+
+    x = build_feature_matrix(df, category_levels=category_levels)
     y = encode_risk_class(df[config.TARGET_COLUMN])
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
+    x_train, x_test, y_train, y_test = train_test_split(
+        x,
+        y,
         test_size=test_size,
         stratify=y,
         random_state=config.RANDOM_STATE,
     )
 
     clf = build_classifier()
-    clf.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
+    clf.fit(x_train, y_train, eval_set=[(x_test, y_test)], verbose=False)
 
-    y_pred = clf.predict(X_test)
+    y_pred = clf.predict(x_test)
     report = classification_report(
         y_test, y_pred, target_names=list(config.RISK_CLASSES), output_dict=True
     )
@@ -106,8 +112,8 @@ def train(
             for cls in config.RISK_CLASSES
         },
         "confusion_matrix": cm,
-        "n_train": len(X_train),
-        "n_test": len(X_test),
+        "n_train": len(x_train),
+        "n_test": len(x_test),
     }
 
     return TrainedModel(
@@ -115,5 +121,6 @@ def train(
         feature_columns=config.FEATURE_COLUMNS,
         categorical_features=config.CATEGORICAL_FEATURES,
         class_names=list(config.RISK_CLASSES),
+        category_levels=category_levels,
         metrics=metrics,
     )
