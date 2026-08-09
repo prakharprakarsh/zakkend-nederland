@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
-import joblib
 import numpy as np
 import pandas as pd
 import xgboost as xgb
@@ -14,6 +17,8 @@ from sklearn.model_selection import train_test_split
 
 from zakkend import config
 from zakkend.features.engineering import build_feature_matrix, encode_risk_class
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -36,14 +41,75 @@ class TrainedModel:
         idx = probs.argmax(axis=1)
         return np.array([self.class_names[i] for i in idx])
 
-    def save(self, path=None) -> None:
-        path = path or config.MODEL_PATH
-        joblib.dump(self, path)
+    def save(self, path: Path | str | None = None) -> None:
+        """Save model in XGBoost's portable UBJSON format.
+
+        Writes two sibling files:
+          <stem>.ubj   — the XGBoost model (portable across XGBoost versions)
+          <stem>.meta.json — feature schema, category levels, metrics, version stamp
+        """
+        ubj_path = Path(path or config.MODEL_PATH).with_suffix(".ubj")
+        ubj_path.parent.mkdir(parents=True, exist_ok=True)
+        self.classifier.save_model(ubj_path)
+        meta = {
+            "feature_columns": self.feature_columns,
+            "categorical_features": self.categorical_features,
+            "category_levels": self.category_levels,
+            "class_names": self.class_names,
+            "metrics": self.metrics,
+            "xgboost_version": xgb.__version__,
+            "trained_at": datetime.now(UTC).isoformat(),
+        }
+        ubj_path.with_suffix(".meta.json").write_text(json.dumps(meta, indent=2))
 
     @classmethod
-    def load(cls, path=None) -> TrainedModel:
-        path = path or config.MODEL_PATH
-        return joblib.load(path)
+    def load(cls, path: Path | str | None = None) -> TrainedModel:
+        """Load a saved model.
+
+        Prefers the portable .ubj + .meta.json pair. Falls back to a legacy
+        .joblib file with a deprecation warning if the .ubj artefact is absent.
+        """
+        given = Path(path or config.MODEL_PATH)
+        ubj_path = given.with_suffix(".ubj")
+        meta_path = given.with_suffix(".meta.json")
+
+        if not ubj_path.exists():
+            joblib_path = given.with_suffix(".joblib")
+            if joblib_path.exists():
+                logger.warning(
+                    "Loading legacy joblib artefact %s — re-run `python scripts/train.py` "
+                    "to migrate to the portable .ubj format.",
+                    joblib_path,
+                )
+                import joblib  # noqa: PLC0415
+
+                return joblib.load(joblib_path)
+            raise FileNotFoundError(
+                f"No model found at {ubj_path} (or legacy {joblib_path}). "
+                "Run `python scripts/train.py` first."
+            )
+
+        clf = xgb.XGBClassifier()
+        clf.load_model(ubj_path)
+        meta = json.loads(meta_path.read_text())
+
+        saved_version = meta.get("xgboost_version", "unknown")
+        if saved_version != xgb.__version__:
+            logger.warning(
+                "Model was trained with XGBoost %s; current version is %s. "
+                "Re-train if predictions look unexpected.",
+                saved_version,
+                xgb.__version__,
+            )
+
+        return cls(
+            classifier=clf,
+            feature_columns=meta["feature_columns"],
+            categorical_features=meta["categorical_features"],
+            category_levels=meta.get("category_levels", {}),
+            class_names=meta["class_names"],
+            metrics=meta.get("metrics", {}),
+        )
 
 
 def build_classifier() -> xgb.XGBClassifier:

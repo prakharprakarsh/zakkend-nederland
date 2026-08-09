@@ -14,7 +14,7 @@ MODELS_DIR: Path = PROJECT_ROOT / "models"
 for _dir in (DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR):
     _dir.mkdir(parents=True, exist_ok=True)
 
-MODEL_PATH: Path = MODELS_DIR / "subsidence_xgb.joblib"
+MODEL_PATH: Path = MODELS_DIR / "subsidence_xgb.ubj"
 
 # ──────────────────── Netherlands geographic bounds ─────────────────
 NL_LAT_MIN: float = 50.75

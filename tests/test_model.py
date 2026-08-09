@@ -36,12 +36,16 @@ def test_model_predict_class_returns_valid_labels(trained_model):
 
 
 def test_save_and_load_roundtrip(tmp_path, trained_model):
-    path = tmp_path / "m.joblib"
+    path = tmp_path / "m.ubj"
     trained_model.save(path)
+
+    assert path.exists(), "save() must write the .ubj model file"
+    assert path.with_suffix(".meta.json").exists(), "save() must write the sibling .meta.json"
 
     from zakkend.models.baseline import TrainedModel
 
     loaded = TrainedModel.load(path)
+    assert loaded.category_levels == trained_model.category_levels
     df = generate(n=10)
     original = trained_model.predict_proba(df)
     reloaded = loaded.predict_proba(df)

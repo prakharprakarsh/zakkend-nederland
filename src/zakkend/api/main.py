@@ -25,12 +25,10 @@ _explainer: SubsidenceExplainer | None = None
 async def lifespan(app: FastAPI):
     """Load the trained model into memory on startup."""
     global _model, _explainer
-    if not config.MODEL_PATH.exists():
-        raise RuntimeError(
-            f"No trained model found at {config.MODEL_PATH}. "
-            "Run `python scripts/train.py` first."
-        )
-    _model = TrainedModel.load()
+    try:
+        _model = TrainedModel.load()
+    except FileNotFoundError as exc:
+        raise RuntimeError("No trained model found. Run `python scripts/train.py` first.") from exc
     _explainer = SubsidenceExplainer(_model)
     yield
 

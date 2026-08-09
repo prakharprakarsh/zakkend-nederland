@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from pathlib import Path
 
 from zakkend import config
 
@@ -49,10 +48,15 @@ def main() -> None:
     print("=" * 60)
 
     fetch_cmd = [
-        sys.executable, "-m", "zakkend.data.pipeline",
-        "--municipalities", *args.municipalities,
-        "--max-per-muni", str(args.max_per_muni),
-        "--out", str(out_path),
+        sys.executable,
+        "-m",
+        "zakkend.data.pipeline",
+        "--municipalities",
+        *args.municipalities,
+        "--max-per-muni",
+        str(args.max_per_muni),
+        "--out",
+        str(out_path),
     ]
     result = subprocess.run(fetch_cmd)
     if result.returncode != 0:
@@ -70,8 +74,10 @@ def main() -> None:
         print("=" * 60)
 
         train_cmd = [
-            sys.executable, "scripts/train.py",
-            "--data", str(out_path),
+            sys.executable,
+            "scripts/train.py",
+            "--data",
+            str(out_path),
         ]
         if args.augment_synthetic > 0:
             train_cmd += ["--augment-synthetic", str(args.augment_synthetic)]
@@ -85,7 +91,7 @@ def main() -> None:
     print(f"  Data: {out_path}")
     if args.train:
         print(f"  Model: {config.MODEL_PATH}")
-        print(f"\n  Launch demo: python -m uvicorn zakkend.api.main:app --reload")
+        print("\n  Launch demo: python -m uvicorn zakkend.api.main:app --reload")
 
 
 if __name__ == "__main__":

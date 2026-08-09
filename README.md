@@ -196,6 +196,23 @@ critical(334)│   0  │   0  │  48  │ 286  │
 - [ ] **Phase 5** — Weak supervision from KCAF/municipal zone data; probability calibration
   study; model card; held-out-city evaluation
 
+## Model artefact format
+
+The trained model is saved as two sibling files in `models/`:
+
+- `subsidence_xgb.ubj` — XGBoost's portable UBJSON format, loadable across
+  XGBoost versions without pickling
+- `subsidence_xgb.meta.json` — feature schema, frozen categorical vocabulary,
+  metrics, and the XGBoost version used at training time
+
+**Why not joblib?** Joblib pickle deserialisation is arbitrary code execution — loading
+a `.joblib` file you did not produce yourself is a supply-chain risk. The `.ubj` format
+is XGBoost's own serialisation protocol; it is portable, version-stamped, and safe to
+load from untrusted sources.
+
+A full `requirements.lock.txt` (pinned from `pip freeze`) is committed alongside
+`requirements.txt` so that the exact working environment is reproducible.
+
 ## Known limitations
 
 See [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) for a full gap analysis. The key

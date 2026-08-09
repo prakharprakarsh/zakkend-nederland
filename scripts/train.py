@@ -129,7 +129,7 @@ def main() -> None:
 
     # ─── Data source breakdown ───
     if "municipality" in df.columns:
-        print(f"\nData sources:")
+        print("\nData sources:")
         for muni, count in df["municipality"].value_counts().items():
             print(f"  {muni}: {count:,} buildings")
         synth_count = df["municipality"].isna().sum()
