@@ -27,9 +27,13 @@ real supervision.
 
 ## L2 — 9 of 11 features are simulated
 
-**Current state.** Only `year_built` (BAG `bouwjaar`) and `building_age` (derived)
-come from a real government registry. The remaining 9 features are produced by
-domain-informed random number generators. See the feature table in the README.
+**Current state.** Only `year_built` (BAG `bouwjaar`) is a directly measured feature
+from a real government registry. `building_age` is computed arithmetically from
+`year_built` (`2026 − year_built`) — it does not come from any data source and adds
+no independent information. The building centroid (`lat`/`lon`) is also a real BAG
+measurement but is not a model feature; it drives the coordinate-based estimators.
+The remaining 9 model features are produced by domain-informed random number generators.
+See the feature table in the README.
 
 **Why it matters.** The model is learning from simulated measurements of simulated
 labels. Domain patterns (peat + wooden pile → higher risk) are encoded correctly,
