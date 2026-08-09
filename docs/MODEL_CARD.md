@@ -100,9 +100,13 @@ frozen vocabulary captured at training time (`TrainedModel.category_levels`).
 - `neighborhood_damage_rate` is assigned per spatial hash bucket, so buildings in the
   same ~2 km cell share a feature value across the split — the reported accuracy is
   mildly optimistic as a result (see `docs/LIMITATIONS.md §L5`).
-- A municipality-based grouped split (train: Gouda/Rotterdam/Zaanstad; test: Dordrecht)
-  gives a harder, leakage-free estimate: **69.4% accuracy** vs 82.5% on the random split.
-  The 13 pp gap is the cost of spatial leakage in the random split.
+- A municipality-based grouped split (train: 2,854 real Gouda/Rotterdam/Zaanstad buildings;
+  test: 974 real Dordrecht buildings from `real_data.parquet`) produces **18.3% accuracy**
+  (macro F1 0.090). This is not a generalisation estimate — the result conflates two
+  confounds: (a) `soil_type = sandy_clay` absent from training vocabulary, encoded as NaN
+  for all 974 test rows; (b) class distribution inversion (training is 75% `critical`,
+  Dordrecht is 65% `moderate`). The two effects cannot be separated from this evaluation
+  alone. See README Results for full details.
 
 ---
 
@@ -153,20 +157,36 @@ experienced foundation damage.
 | `critical` | 89.6% | 85.3% | 87.4% | 334 |
 | **Overall** | — | — | **macro F1 0.797** | 2000 |
 
-**Per-class performance — grouped split** (Dordrecht holdout, 2,500-row test set):
+**Per-class performance — grouped split** (Dordrecht holdout, 974 real PDOK BAG buildings):
 
 | Class | Precision | Recall | F1 | Support |
 |---|---|---|---|---|
-| `low` | 43.3% | 70.0% | **53.5%** | 170 |
-| `moderate` | 72.4% | 87.4% | 79.2% | 1290 |
-| `high` | 61.8% | 40.2% | **48.7%** | 659 |
-| `critical` | 93.8% | 59.1% | 72.5% | 381 |
-| **Overall** | — | — | **macro F1 0.635** | 2500 |
+| `low` | 18.2% | 100.0% | 30.8% | 177 |
+| `moderate` | 0.0% | 0.0% | **0.0%** | 632 |
+| `high` | 0.0% | 0.0% | **0.0%** | 128 |
+| `critical` | 50.0% | 2.7% | 5.1% | 37 |
+| **Overall** | — | — | **macro F1 0.090** | 974 |
 
-**`low` and `high` are the weakest classes** on the grouped split. `high` recall drops
-to 40% when testing on an unseen city — the model under-predicts the most dangerous
-class it hasn't seen before. On the random split, sample weights improve `low` F1 by
-7.7 pp (0.603 → 0.680) with no meaningful loss on `moderate`.
+**This grouped-split result is a model failure, not a generalisation measure.** Two
+confounds are simultaneously present and cannot be separated:
+
+- **Feature domain gap:** All 2,854 training buildings have `soil_type = peat`. All 974
+  Dordrecht buildings have `soil_type = sandy_clay`, absent from training vocabulary.
+  XGBoost encodes all test rows as NaN for soil_type and routes them through its
+  missing-value branch, which predicts `low` for everything.
+
+- **Class distribution mismatch:** The rule engine assigns training data 75% `critical` /
+  39% `high` / 1% `moderate` (peat + wooden pile = high risk). Dordrecht is 65%
+  `moderate` / 18% `low`. The model had zero real training examples of `low` class
+  (1 synthetic anchor row was added to satisfy XGBoost's class range requirement).
+
+The model (18.3% accuracy) does not beat uniform random (22.5%) on this split.
+`DummyClassifier(most_frequent)` — trained on the same data, always predicts `critical`
+— scores 3.8% on Dordrecht. XGBoost outperforms the majority-class baseline (+14.5 pp)
+only because the synthetic `low` anchor causes it to predict `low` for all 974 test rows.
+
+On the random split, sample weights improve `low` F1 from 0.603 → 0.680 (+7.7 pp)
+with no meaningful loss on `moderate`.
 
 **Intersectional analysis.** Not performed. The training data contains no demographic
 variables. Geographic breakdown is not meaningful given the synthetic coordinates.

@@ -141,6 +141,8 @@ def train(
     test_df: pd.DataFrame | None = None,
     use_sample_weights: bool = True,
     municipality_split: dict[str, list[str]] | None = None,
+    anchor_rows_added: int = 0,
+    anchor_classes_added: list[str] | None = None,
 ) -> TrainedModel:
     """Train the baseline model on a labeled dataframe.
 
@@ -161,6 +163,11 @@ def train(
     municipality_split : dict or None
         Metadata dict (e.g. ``{"train": [...], "test": [...]}``). When provided
         it is stored verbatim in metrics under ``"municipality_split"``.
+    anchor_rows_added : int
+        Number of synthetic anchor rows prepended to ``df`` by the caller to
+        satisfy XGBoost's contiguous-class-label requirement. Stored in metrics.
+    anchor_classes_added : list[str] or None
+        Which class names were added as anchors. Stored in metrics.
 
     Returns
     -------
@@ -183,6 +190,8 @@ def train(
     x = build_feature_matrix(df, category_levels=category_levels)
     y = encode_risk_class(df[config.TARGET_COLUMN])
 
+    evaluation_notes: dict[str, Any] = {}
+
     if val_df is None:
         # Random 60/20/20 stratified split.
         x_trainval, x_test, y_trainval, y_test = train_test_split(
@@ -204,7 +213,27 @@ def train(
         x_train, y_train = x, y
         x_val = build_feature_matrix(val_df, category_levels=category_levels)
         y_val = encode_risk_class(val_df[config.TARGET_COLUMN])
-        x_test = build_feature_matrix(test_df, category_levels=category_levels)
+
+        # Detect categories in test_df not seen in training (e.g. held-out city has
+        # different soil type). Record them as evaluation notes; encode as NaN so
+        # XGBoost handles them via its missing-value branch.
+        for col in config.CATEGORICAL_FEATURES:
+            test_vals = set(test_df[col].astype(str).unique())
+            unseen = sorted(test_vals - set(category_levels[col]))
+            if unseen:
+                evaluation_notes[col] = {
+                    "unseen_in_test": unseen,
+                    "training_vocabulary": category_levels[col],
+                    "note": (
+                        f"Test rows with {col} in {unseen} are not in the training vocabulary "
+                        f"{category_levels[col]}. They are encoded as NaN and handled by "
+                        "XGBoost's missing-value split. The reported accuracy conflates "
+                        "geographic distribution shift with unseen-category coverage; "
+                        "these effects cannot be separated from this evaluation alone."
+                    ),
+                }
+
+        x_test = build_feature_matrix(test_df, category_levels=category_levels, allow_unseen=True)
         y_test = encode_risk_class(test_df[config.TARGET_COLUMN])
 
     weights = compute_sample_weight("balanced", y_train) if use_sample_weights else None
@@ -258,6 +287,21 @@ def train(
 
     if municipality_split is not None:
         metrics["municipality_split"] = municipality_split
+
+    if anchor_rows_added > 0:
+        evaluation_notes["class_coverage_fix"] = {
+            "anchor_rows_added": anchor_rows_added,
+            "classes_added": anchor_classes_added or [],
+            "note": (
+                f"Training data lacked {anchor_classes_added} class(es). "
+                f"{anchor_rows_added} synthetic anchor row(s) were added to satisfy "
+                "XGBoost's contiguous-class-label requirement. "
+                "The model has effectively 0 real training examples for these classes."
+            ),
+        }
+
+    if evaluation_notes:
+        metrics["evaluation_notes"] = evaluation_notes
 
     return TrainedModel(
         classifier=clf,

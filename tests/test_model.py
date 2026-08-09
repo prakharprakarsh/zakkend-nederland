@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pandas as pd
 import pytest
 
 from zakkend import config
@@ -95,30 +94,18 @@ def test_three_way_split_sizes(trained_model):
 
 
 def test_grouped_split_municipality_disjoint():
-    """Train and test municipality sets must not overlap in the grouped split."""
+    """municipality_split metadata must be stored and train/test sets must not overlap."""
     from sklearn.model_selection import train_test_split as sk_split
 
-    from zakkend.data.synthetic import generate_for_municipality
+    train_df = generate(n=1_200)
+    test_df_raw = generate(n=300)
 
-    train_munis = ["Gouda", "Rotterdam", "Zaanstad"]
-    test_muni = "Dordrecht"
-
-    train_frames = [generate_for_municipality(m, n=500) for m in train_munis]
-    train_df = pd.concat(train_frames, ignore_index=True)
-    dordrecht_df = generate_for_municipality(test_muni, n=500)
-
-    # Val split from training data
-    train_core, val_df = sk_split(
-        train_df,
-        test_size=0.20,
-        random_state=config.RANDOM_STATE,
-    )
-
+    train_core, val_df = sk_split(train_df, test_size=0.20, random_state=config.RANDOM_STATE)
     model = train(
         train_core,
         val_df=val_df,
-        test_df=dordrecht_df,
-        municipality_split={"train": train_munis, "test": [test_muni]},
+        test_df=test_df_raw,
+        municipality_split={"train": ["CityA"], "test": ["CityB"]},
     )
 
     ms = model.metrics.get("municipality_split", {})
