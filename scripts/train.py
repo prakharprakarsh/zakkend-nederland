@@ -66,14 +66,14 @@ def _print_metrics(model: object, label: str = "") -> None:
     if "evaluation_notes" in m:
         print("\n⚠  Evaluation notes:")
         for key, info in m["evaluation_notes"].items():
-            if key == "class_coverage_fix":
-                print(f"  class_coverage_fix: {info['note']}")
-            else:
+            if "unseen_in_test" in info:
                 print(
                     f"  {key}: unseen={info['unseen_in_test']}"
                     f"  training_vocab={info['training_vocabulary']}"
                 )
                 print(f"    → {info['note']}")
+            else:
+                print(f"  {key}: {info.get('note', info)}")
     print("\nPer-class performance:")
     for cls, pc in m["per_class"].items():
         print(
@@ -222,25 +222,17 @@ def main() -> None:
         for cls, n in dordrecht_labeled["risk_class"].value_counts().items():
             print(f"    {cls}: {n}")
 
-        # XGBoost 3.x sklearn wrapper requires labels [0..n_classes-1] contiguous.
-        # Peat-zone municipalities (Gouda/Rotterdam/Zaanstad) produce no 'low'-class
-        # buildings under the rule engine. Add 1 synthetic anchor row per missing
-        # class to satisfy the constraint. Documented in evaluation_notes.
+        # Note which classes are absent from training (no anchor rows injected).
+        # The Booster API with num_class=4 in params handles this correctly:
+        # XGBoost still outputs 4-class probabilities; absent classes get base-score
+        # logits only. Documented in evaluation_notes by train().
         present = set(train_labeled["risk_class"].unique())
         missing_classes = [c for c in config.RISK_CLASSES if c not in present]
-        anchor_rows_added = 0
         if missing_classes:
             print(f"\n  ⚠ Training classes missing: {missing_classes}")
-            print("    Adding 1 synthetic anchor row per missing class...")
-            syn_pool = generate_synthetic(n=50_000)
-            for cls_name in missing_classes:
-                anchor = syn_pool[syn_pool["risk_class"] == cls_name].iloc[:1]
-                train_labeled = pd.concat([train_labeled, anchor], ignore_index=True)
-                anchor_rows_added += 1
-            print(
-                f"    Training set after anchors: {len(train_labeled):,} rows "
-                f"({anchor_rows_added} synthetic, {len(train_labeled) - anchor_rows_added} real)"
-            )
+            print("    These classes have zero real training examples in the peat-zone cities.")
+            print("    XGBoost (num_class=4) still outputs 4-class probabilities.")
+            print("    No synthetic anchor rows are injected.")
 
         # Build train/val split from the concatenated training municipalities.
         train_core_df, val_df_df = train_test_split(
@@ -254,8 +246,6 @@ def main() -> None:
             val_df=val_df_df,
             test_df=dordrecht_labeled,
             municipality_split={"train": train_munis, "test": [test_muni]},
-            anchor_rows_added=anchor_rows_added,
-            anchor_classes_added=missing_classes,
         )
 
     # ─── Save model ───

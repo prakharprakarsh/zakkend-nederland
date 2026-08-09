@@ -15,19 +15,20 @@ import xgboost as xgb
 from sklearn.dummy import DummyClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
-from sklearn.utils.class_weight import compute_sample_weight
 
 from zakkend import config
 from zakkend.features.engineering import build_feature_matrix, encode_risk_class
 
 logger = logging.getLogger(__name__)
 
+_N_CLASSES = len(config.RISK_CLASSES)
+
 
 @dataclass
 class TrainedModel:
     """Bundle of a fitted classifier + metadata for reproducibility."""
 
-    classifier: xgb.XGBClassifier
+    classifier: xgb.Booster
     feature_columns: list[str]
     categorical_features: list[str]
     class_names: list[str]
@@ -36,7 +37,11 @@ class TrainedModel:
 
     def predict_proba(self, df: pd.DataFrame) -> np.ndarray:
         x_ready = build_feature_matrix(df, category_levels=self.category_levels)
-        return self.classifier.predict_proba(x_ready)
+        dm = xgb.DMatrix(x_ready)
+        probs = self.classifier.predict(dm)
+        if probs.ndim == 1:
+            probs = probs.reshape(-1, len(self.class_names))
+        return probs
 
     def predict_class(self, df: pd.DataFrame) -> np.ndarray:
         probs = self.predict_proba(df)
@@ -91,8 +96,8 @@ class TrainedModel:
                 "Run `python scripts/train.py` first."
             )
 
-        clf = xgb.XGBClassifier()
-        clf.load_model(ubj_path)
+        bst = xgb.Booster()
+        bst.load_model(ubj_path)
         meta = json.loads(meta_path.read_text())
 
         saved_version = meta.get("xgboost_version", "unknown")
@@ -105,7 +110,7 @@ class TrainedModel:
             )
 
         return cls(
-            classifier=clf,
+            classifier=bst,
             feature_columns=meta["feature_columns"],
             categorical_features=meta["categorical_features"],
             category_levels=meta.get("category_levels", {}),
@@ -114,24 +119,42 @@ class TrainedModel:
         )
 
 
-def build_classifier() -> xgb.XGBClassifier:
-    """XGBoost with native categorical handling. Tuned for ~10k rows."""
-    return xgb.XGBClassifier(
-        n_estimators=300,
-        max_depth=6,
-        learning_rate=0.08,
-        subsample=0.9,
-        colsample_bytree=0.85,
-        min_child_weight=3,
-        reg_lambda=1.0,
-        objective="multi:softprob",
-        num_class=len(config.RISK_CLASSES),
-        enable_categorical=True,
-        tree_method="hist",
-        early_stopping_rounds=30,
-        random_state=config.RANDOM_STATE,
-        n_jobs=-1,
-    )
+def _booster_params() -> dict[str, Any]:
+    """XGBoost training params for the Booster API. Tuned for ~10k rows."""
+    return {
+        "objective": "multi:softprob",
+        "num_class": _N_CLASSES,
+        "max_depth": 6,
+        "learning_rate": 0.08,
+        "subsample": 0.9,
+        "colsample_bytree": 0.85,
+        "min_child_weight": 3,
+        "lambda": 1.0,
+        "tree_method": "hist",
+        "seed": config.RANDOM_STATE,
+        "nthread": -1,
+        "verbosity": 0,
+    }
+
+
+def _sample_weights(y: pd.Series, use_weights: bool) -> np.ndarray | None:
+    """Balanced sample weights using the full 4-class vocabulary.
+
+    Uses _N_CLASSES (always 4) in the denominator so absent training classes
+    do not inflate weights for the classes that are present.  A class with zero
+    training examples gets zero weight naturally — no samples, no contribution.
+    """
+    if not use_weights:
+        return None
+    n = len(y)
+    weights = np.zeros(n, dtype=np.float32)
+    y_arr = np.asarray(y)
+    for cls_idx in range(_N_CLASSES):
+        mask = y_arr == cls_idx
+        count = int(mask.sum())
+        if count > 0:
+            weights[mask] = n / (_N_CLASSES * count)
+    return weights
 
 
 def train(
@@ -141,13 +164,8 @@ def train(
     test_df: pd.DataFrame | None = None,
     use_sample_weights: bool = True,
     municipality_split: dict[str, list[str]] | None = None,
-    anchor_rows_added: int = 0,
-    anchor_classes_added: list[str] | None = None,
 ) -> TrainedModel:
     """Train the baseline model on a labeled dataframe.
-
-    Expects `df` to contain every column in `config.FEATURE_COLUMNS`
-    plus the target `config.TARGET_COLUMN`.
 
     Parameters
     ----------
@@ -163,11 +181,6 @@ def train(
     municipality_split : dict or None
         Metadata dict (e.g. ``{"train": [...], "test": [...]}``). When provided
         it is stored verbatim in metrics under ``"municipality_split"``.
-    anchor_rows_added : int
-        Number of synthetic anchor rows prepended to ``df`` by the caller to
-        satisfy XGBoost's contiguous-class-label requirement. Stored in metrics.
-    anchor_classes_added : list[str] or None
-        Which class names were added as anchors. Stored in metrics.
 
     Returns
     -------
@@ -236,32 +249,60 @@ def train(
         x_test = build_feature_matrix(test_df, category_levels=category_levels, allow_unseen=True)
         y_test = encode_risk_class(test_df[config.TARGET_COLUMN])
 
-    weights = compute_sample_weight("balanced", y_train) if use_sample_weights else None
+    # Document which classes are absent from training (informational — no anchor rows added).
+    present_classes = {int(v) for v in np.asarray(y_train)}
+    absent_classes = [config.RISK_CLASSES[i] for i in range(_N_CLASSES) if i not in present_classes]
+    if absent_classes:
+        evaluation_notes["absent_training_classes"] = {
+            "classes": absent_classes,
+            "note": (
+                f"Classes {absent_classes} have zero training examples under the rule engine "
+                "for the given municipalities. XGBoost (num_class=4) still outputs 4-class "
+                "probabilities; absent classes receive base-score logits only. "
+                "No synthetic anchor rows were injected."
+            ),
+        }
 
-    clf = build_classifier()
-    clf.fit(
-        x_train,
-        y_train,
-        eval_set=[(x_val, y_val)],
-        sample_weight=weights,
-        verbose=False,
+    weights = _sample_weights(y_train, use_sample_weights)
+
+    dm_train = xgb.DMatrix(x_train, label=y_train, weight=weights)
+    dm_val = xgb.DMatrix(x_val, label=y_val)
+    dm_test = xgb.DMatrix(x_test, label=y_test)
+
+    bst = xgb.train(
+        _booster_params(),
+        dm_train,
+        num_boost_round=300,
+        evals=[(dm_val, "val")],
+        callbacks=[xgb.callback.EarlyStopping(rounds=30, save_best=True)],
     )
 
-    y_pred = clf.predict(x_test)
+    raw = bst.predict(dm_test)
+    if raw.ndim == 1:
+        raw = raw.reshape(-1, _N_CLASSES)
+    y_pred = raw.argmax(axis=1)
+
     report = classification_report(
-        y_test, y_pred, target_names=list(config.RISK_CLASSES), output_dict=True
+        y_test,
+        y_pred,
+        labels=list(range(_N_CLASSES)),
+        target_names=list(config.RISK_CLASSES),
+        output_dict=True,
+        zero_division=0,
     )
-    cm = confusion_matrix(y_test, y_pred).tolist()
+    cm = confusion_matrix(y_test, y_pred, labels=list(range(_N_CLASSES))).tolist()
 
     baselines: dict[str, float] = {}
     for strategy in ("most_frequent", "prior", "stratified", "uniform"):
         dummy = DummyClassifier(strategy=strategy, random_state=config.RANDOM_STATE)
         dummy.fit(x_train, y_train)
         baselines[strategy] = round(float(dummy.score(x_test, y_test)), 4)
+    # Fixed 4-class uniform: 1/4 = 0.25, regardless of training class distribution.
+    baselines["uniform_4class"] = round(1.0 / _N_CLASSES, 4)
 
-    best_iter = None
-    if hasattr(clf, "best_iteration") and clf.best_iteration is not None:
-        best_iter = int(clf.best_iteration)
+    best_iter = getattr(bst, "best_iteration", None)
+    if best_iter is not None:
+        best_iter = int(best_iter)
 
     metrics: dict[str, object] = {
         "accuracy": float(report["accuracy"]),
@@ -288,23 +329,11 @@ def train(
     if municipality_split is not None:
         metrics["municipality_split"] = municipality_split
 
-    if anchor_rows_added > 0:
-        evaluation_notes["class_coverage_fix"] = {
-            "anchor_rows_added": anchor_rows_added,
-            "classes_added": anchor_classes_added or [],
-            "note": (
-                f"Training data lacked {anchor_classes_added} class(es). "
-                f"{anchor_rows_added} synthetic anchor row(s) were added to satisfy "
-                "XGBoost's contiguous-class-label requirement. "
-                "The model has effectively 0 real training examples for these classes."
-            ),
-        }
-
     if evaluation_notes:
         metrics["evaluation_notes"] = evaluation_notes
 
     return TrainedModel(
-        classifier=clf,
+        classifier=bst,
         feature_columns=config.FEATURE_COLUMNS,
         categorical_features=config.CATEGORICAL_FEATURES,
         class_names=list(config.RISK_CLASSES),

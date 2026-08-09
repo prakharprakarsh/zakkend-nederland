@@ -55,6 +55,10 @@ TARGET_COLUMN: str = "risk_class"
 
 RANDOM_STATE: int = 42
 
+# Reference year used to derive building_age = REFERENCE_YEAR - year_built.
+# Fixed rather than datetime.now().year so training is reproducible.
+REFERENCE_YEAR: int = 2026
+
 # ──────────────── Target municipalities for Phase 2 ────────────────
 # These are known high-risk areas for subsidence.
 TARGET_MUNICIPALITIES: dict[str, dict] = {

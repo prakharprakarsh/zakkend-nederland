@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from zakkend import config
 from zakkend.explain.shap_explainer import SubsidenceExplainer
@@ -51,16 +52,26 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 # ─────────────────────────────── Schemas ────────────────────────────────
+
+# Literal types matching config.FOUNDATION_TYPES and config.SOIL_TYPES.
+# FastAPI surfaces these as string enums in the OpenAPI schema.
+# Keep in sync with both config constants if they change.
+FoundationType = Literal["wooden_pile", "concrete_pile", "strip", "slab"]
+SoilType = Literal["peat", "clay", "sandy_clay", "sand", "loess"]
+
+
 class BuildingInput(BaseModel):
     """Feature inputs for a single building.
 
     Ranges reflect plausible Dutch data; the API validates conservatively.
+    Extra fields are forbidden — building_age is derived server-side from year_built.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     year_built: int = Field(..., ge=1700, le=2026)
-    building_age: int = Field(..., ge=0, le=326)
-    foundation_type: str = Field(..., examples=["wooden_pile"])
-    soil_type: str = Field(..., examples=["peat"])
+    foundation_type: FoundationType = Field(..., examples=["wooden_pile"])
+    soil_type: SoilType = Field(..., examples=["peat"])
     peat_thickness_m: float = Field(..., ge=0, le=20)
     groundwater_depth_m: float = Field(..., ge=0, le=10)
     groundwater_variability: float = Field(..., ge=0, le=1)
@@ -105,7 +116,9 @@ def health():
 
 
 def _to_dataframe(inp: BuildingInput) -> pd.DataFrame:
-    return pd.DataFrame([inp.model_dump()])
+    data = inp.model_dump()
+    data["building_age"] = config.REFERENCE_YEAR - data["year_built"]
+    return pd.DataFrame([data])
 
 
 def _expected_risk_score(probs: list[float]) -> float:

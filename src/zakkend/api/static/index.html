@@ -132,10 +132,8 @@
   });
 
   function collect() {
-    const yb = +document.getElementById('year_built').value;
     return {
-      year_built: yb,
-      building_age: 2026 - yb,
+      year_built: +document.getElementById('year_built').value,
       foundation_type: document.getElementById('foundation_type').value,
       soil_type: document.getElementById('soil_type').value,
       peat_thickness_m: +document.getElementById('peat_thickness_m').value,

@@ -69,8 +69,8 @@ real-world generalisability. For a real-data model, performance by construction 
 | Evaluation | Command | Accuracy | What it measures |
 |---|---|---|---|
 | Random split (synthetic, 10k rows) | `python3 scripts/train.py` | **0.824** | Rule-recovery — how faithfully XGBoost reconstructs the label rule engine on held-out rows from the same synthetic distribution |
-| Held-out city (real PDOK BAG data) | `python3 scripts/train.py --split grouped` | **0.183** | Model collapse — 972/974 Dordrecht predictions are `low` because `soil_type = sandy_clay` is absent from training vocabulary |
-| `DummyClassifier(uniform)` on Dordrecht | — | **0.225** | Random baseline — the model does not beat it on the held-out city |
+| Held-out city (real PDOK BAG data) | `python3 scripts/train.py --split grouped` | **0.092** | Model collapse — three confounds compound: soil-type/municipality confound, zero low-class training examples, and class-distribution inversion |
+| 4-class uniform baseline | — | **0.250** | Random baseline — the model does not beat it on the held-out city |
 
 **Random-split baselines** (synthetic 2,000-row test set):
 
@@ -102,12 +102,13 @@ frozen vocabulary captured at training time (`TrainedModel.category_levels`).
   same ~2 km cell share a feature value across the split — the reported accuracy is
   mildly optimistic as a result (see `docs/LIMITATIONS.md §L5`).
 - A municipality-based grouped split (train: 2,854 real Gouda/Rotterdam/Zaanstad buildings;
-  test: 974 real Dordrecht buildings from `real_data.parquet`) produces **18.3% accuracy**
-  (macro F1 0.090). This is not a generalisation estimate — the result conflates two
-  confounds: (a) `soil_type = sandy_clay` absent from training vocabulary, encoded as NaN
-  for all 974 test rows; (b) class distribution inversion (training is 75% `critical`,
-  Dordrecht is 65% `moderate`). The two effects cannot be separated from this evaluation
-  alone. See README Results for full details.
+  test: 974 real Dordrecht buildings from `real_data.parquet`) produces **9.2% accuracy**
+  (macro F1 0.142). This is not a generalisation estimate — three confounds compound:
+  (a) `soil_type = sandy_clay` absent from training vocabulary, encoded as NaN for all 974
+  test rows; (b) zero `low`-class training examples (the rule engine produces no low-risk
+  buildings in peat-zone municipalities); (c) class distribution inversion (training is
+  76% `critical`, Dordrecht is 65% `moderate`). These confounds cannot be disentangled
+  from this evaluation alone. See README Results for full details.
 
 ---
 
@@ -162,20 +163,22 @@ experienced foundation damage.
 
 | Class | Precision | Recall | F1 | Support |
 |---|---|---|---|---|
-| `low` | 18.2% | 100.0% | 30.8% | 177 |
-| `moderate` | 0.0% | 0.0% | **0.0%** | 632 |
-| `high` | 0.0% | 0.0% | **0.0%** | 128 |
-| `critical` | 50.0% | 2.7% | 5.1% | 37 |
-| **Overall** | — | — | **macro F1 0.090 · accuracy 0.183** | 974 |
+| `low` | 0.0% | 0.0% | **0.0%** | 177 |
+| `moderate` | 51.4% | 3.0% | **5.7%** | 632 |
+| `high` | 4.2% | 26.6% | **7.3%** | 128 |
+| `critical` | 28.0% | 100.0% | **43.8%** | 37 |
+| **Overall** | — | — | **macro F1 0.142 · accuracy 0.092** | 974 |
 
-**This is model collapse.** The model predicts `low` for 972 of 974 Dordrecht buildings.
-Root cause: the coordinate-based soil classifier assigns one soil type per bounding box;
-all training municipalities are 100% peat, Dordrecht is 100% sandy\_clay. `soil_type` is
-a municipality identifier in this dataset. The model learned a peat = high risk shortcut
-and generalised to: unknown soil = low risk. See `docs/LIMITATIONS.md §L0` and README
-Results for the full explanation.
+**This is model collapse.** Three confounds compound: (1) `soil_type = sandy_clay` is
+absent from training vocabulary → all 974 Dordrecht rows are encoded as NaN and routed
+to the XGBoost missing-value branch; (2) zero `low`-class training examples — the rule
+engine produces no low-risk buildings in peat-zone municipalities, so the model has never
+learned low-risk patterns; (3) training is 76% `critical`, Dordrecht is 65% `moderate`.
+The missing-value branch routes most rows to `critical` (100% recall on 37 true-critical
+buildings) while missing 97% of moderate and all 177 low-risk buildings.
 
-The model does not beat `DummyClassifier(uniform)` (0.225) on this split.
+The model does not beat the 4-class uniform random baseline (0.250) on this split.
+See `docs/LIMITATIONS.md §L0` and README Results for the full explanation.
 
 On the random split, sample weights improve `low` F1 from 0.603 → 0.680 (+7.7 pp)
 with no meaningful loss on `moderate`.

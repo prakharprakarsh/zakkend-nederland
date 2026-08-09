@@ -9,22 +9,32 @@ and what would be needed to close the gap.
 ## L0 — Model collapses on an unseen city; random-split accuracy is not evidence of generalisation
 
 **Current state.** On the real PDOK BAG grouped split (train: Gouda/Rotterdam/Zaanstad,
-test: Dordrecht), the model scores **0.183 accuracy** — below the uniform random baseline
-of **0.225**. It predicts `low` for 972 of 974 Dordrecht buildings.
+test: Dordrecht), the model scores **0.092 accuracy** (macro F1 0.142) — well below the
+4-class uniform random baseline of **0.250**. Three confounds compound to produce this result.
 
-**Root cause.** The coordinate-based soil classifier (`simulate_soil_type` in
-`data/soil.py`) assigns one soil type per geographic bounding box. All three training
-municipalities fall in the Dutch peat belt: `soil_type = peat` for 100% of their
-buildings. Dordrecht is outside the peat belt: `soil_type = sandy_clay` for 100% of its
-buildings. `soil_type` is therefore perfectly confounded with municipality in this dataset
+**Confound 1 — soil-municipality confound.** The coordinate-based soil classifier
+(`simulate_soil_type` in `data/soil.py`) assigns one soil type per geographic bounding
+box. All three training municipalities fall in the Dutch peat belt: `soil_type = peat`
+for 100% of their buildings. Dordrecht is outside the peat belt: `soil_type = sandy_clay`
+for 100% of its buildings. `soil_type` is therefore perfectly confounded with municipality
 — it is a municipality identifier in disguise, not an independent feature signal.
 
-The model learned: peat = high risk. It has never seen sandy\_clay in training. At test
-time, `soil_type = sandy_clay` is absent from the frozen training vocabulary, is encoded
-as NaN, and all 974 Dordrecht test rows are routed to the same XGBoost missing-value
-branch. That branch predicts `low` for everything, because the only `low`-class training
-examples it has seen used non-peat soil (specifically: one synthetic anchor row added to
-satisfy XGBoost's class range requirement). This is model collapse, not degradation.
+At test time, `soil_type = sandy_clay` is absent from the frozen training vocabulary,
+is encoded as NaN, and all 974 Dordrecht test rows are routed to the same XGBoost
+missing-value branch.
+
+**Confound 2 — zero `low`-class training examples.** The rule engine assigns risk scores
+based on peat soil and wooden pile foundations. All three training municipalities are
+100% peat. Under the rule engine, peat-zone buildings receive high risk scores; zero
+buildings score in the `low` range. The model has never seen a `low`-risk building in
+training. No synthetic anchor rows were injected to compensate for this — doing so
+would distort sample weights and contaminate a real-data evaluation.
+
+**Confound 3 — class distribution inversion.** Training data is 76% `critical` (peat +
+wooden piles → high risk). Dordrecht is 65% `moderate` (sandy_clay → lower risk). The
+missing-value branch routes most Dordrecht rows to `critical` (the dominant training class),
+yielding 100% recall on the 37 true-critical buildings but near-zero recall on the 632
+true-moderate buildings.
 
 **Why the random-split figure (0.824) does not refute this.** The 82.5% accuracy is
 achieved by recovering the synthetic rule engine on held-out rows from the same
@@ -39,11 +49,11 @@ the rule breaks down entirely.
 | | Command | Accuracy |
 |---|---|---|
 | Random split (synthetic) | `python3 scripts/train.py` | 0.824 |
-| Held-out city (real data) | `python3 scripts/train.py --split grouped` | **0.183** |
-| Uniform baseline on Dordrecht | — | 0.225 |
+| Held-out city (real data) | `python3 scripts/train.py --split grouped` | **0.092** |
+| 4-class uniform baseline | — | 0.250 |
 
 The 0.824 should be reported only as a pipeline integrity check. It is not evidence that
-the model has learned transferable risk assessment. The 0.183 is the honest number for
+the model has learned transferable risk assessment. The 0.092 is the honest number for
 cross-municipality generalisation on real PDOK BAG data with this feature engineering.
 
 **What's needed.** Two independent interventions are required to make the held-out-city
@@ -74,7 +84,7 @@ thresholded at three fixed cutoffs, with a `N(0, 0.05)` noise term.
 how faithfully XGBoost reconstructs the rule engine. The ~17% gap from perfect is almost
 entirely the noise term straddling the thresholds. This is a valid pipeline integrity
 check but should not be described as evidence of real-world predictive skill. See §L0
-for why the held-out-city result (0.183) shows the rule-recovery does not transfer.
+for why the held-out-city result (0.092) shows the rule-recovery does not transfer.
 
 **What's needed.** Weak supervision from KCAF / municipal *funderingsrisico* zone
 polygons would provide the first real, defensible labels. Labelling buildings by
@@ -160,9 +170,9 @@ optimistic as a result. In a real deployment, you would never see a test buildin
 neighbourhood rate at training time.
 
 **What's needed.** A municipality-based grouped split has been added (`--split grouped`)
-and reveals the problem explicitly: the held-out-city result (0.183) is below the uniform
-baseline (0.225). The gap cannot be closed without real soil, groundwater, and InSAR data
-that are not confounded with municipality geography — see §L0.
+and reveals the problem explicitly: the held-out-city result (0.092) is well below the
+4-class uniform baseline (0.250). The gap cannot be closed without real soil, groundwater,
+and InSAR data that are not confounded with municipality geography — see §L0.
 
 ---
 
