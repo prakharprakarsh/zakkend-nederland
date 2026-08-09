@@ -91,7 +91,6 @@ with st.sidebar:
 # ──────────── Build features dict ────────────
 features = {
     "year_built": year_built,
-    "building_age": 2026 - year_built,
     "foundation_type": foundation_type,
     "soil_type": soil_type,
     "peat_thickness_m": peat_thickness,
@@ -159,8 +158,9 @@ else:
             model = TrainedModel.load()
             explainer = SubsidenceExplainer(model)
 
-            # Predict
+            # Predict — building_age derived here, not from the sidebar
             df = pd.DataFrame([features])
+            df["building_age"] = 2026 - df["year_built"]
             probs = model.predict_proba(df)[0]
             explanation = explainer.explain(df)
 
