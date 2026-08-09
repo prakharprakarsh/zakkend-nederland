@@ -130,7 +130,10 @@ def _score_to_class(scores: np.ndarray) -> np.ndarray:
     return classes
 
 
-def generate(n: int = 10_000, seed: int = config.RANDOM_STATE) -> pd.DataFrame:
+def generate(
+    n: int = 10_000,
+    seed: int = config.RANDOM_STATE,
+) -> pd.DataFrame:
     """Generate n synthetic buildings across the Netherlands.
 
     Parameters
@@ -162,7 +165,7 @@ def generate(n: int = 10_000, seed: int = config.RANDOM_STATE) -> pd.DataFrame:
             era_choice == 1, rng.integers(1945, 1990, size=n), rng.integers(1990, 2025, size=n)
         ),
     )
-    building_age = 2026 - year_built
+    building_age = config.REFERENCE_YEAR - year_built
 
     soil = _sample_soil(rng, in_peat)
     foundation = _sample_foundation(rng, year_built, soil)

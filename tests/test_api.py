@@ -29,7 +29,6 @@ def client():
 def _sample_input() -> dict:
     return {
         "year_built": 1920,
-        "building_age": 106,
         "foundation_type": "wooden_pile",
         "soil_type": "peat",
         "peat_thickness_m": 2.5,
@@ -105,31 +104,43 @@ def test_soil_type_changes_prediction(client):
     ), "soil_type has no effect on predictions — categorical encoding is broken"
 
 
-def test_unknown_foundation_type_returns_422(client):
-    """An out-of-vocabulary category must be rejected with 422, not a 500 stack trace.
+def test_invalid_foundation_type_returns_422(client):
+    """An invalid foundation_type must be rejected with 422.
 
-    Without vocabulary freezing, XGBoost raises a raw XGBoostError which FastAPI
-    surfaces as a 500. After the fix, UnknownCategoryError is caught and mapped to 422.
+    Pydantic validates against the Literal type before the request reaches the
+    model. UnknownCategoryError is kept as defence-in-depth for values that pass
+    Pydantic (e.g. valid Literal but absent from a subset-trained model).
     """
     payload = _sample_input() | {"foundation_type": "banana"}
     r = client.post("/predict", json=payload)
-    assert r.status_code == 422, (
-        f"Expected 422 for unknown category, got {r.status_code}. "
-        "UnknownCategoryError is not being caught before XGBoost sees the value."
-    )
+    assert r.status_code == 422, f"Expected 422 for invalid foundation_type, got {r.status_code}."
 
 
-def test_unknown_soil_type_returns_422(client):
-    """Same guard for soil_type OOD values."""
+def test_invalid_soil_type_returns_422(client):
+    """An invalid soil_type must be rejected with 422 via Pydantic Literal validation."""
     payload = _sample_input() | {"soil_type": "gravel"}
     r = client.post("/predict", json=payload)
-    assert r.status_code == 422, f"Expected 422 for unknown category, got {r.status_code}."
+    assert r.status_code == 422, f"Expected 422 for invalid soil_type, got {r.status_code}."
+
+
+def test_building_age_field_rejected(client):
+    """building_age is no longer a user input — the API returns 422 if it is sent.
+
+    Before §1.5 fix: year_built=2020 with building_age=300 returned 200 OK and
+    used the contradictory user-supplied age. After the fix: extra fields are
+    forbidden (ConfigDict extra='forbid'), and building_age is derived server-side
+    from year_built via config.REFERENCE_YEAR.
+    """
+    contradictory = _sample_input() | {"year_built": 2020, "building_age": 300}
+    r = client.post("/predict", json=contradictory)
+    assert (
+        r.status_code == 422
+    ), f"Expected 422 when building_age is supplied (extra field), got {r.status_code}."
 
 
 def test_high_risk_profile_predicts_higher_than_low(client):
     low = _sample_input() | {
         "year_built": 2015,
-        "building_age": 11,
         "foundation_type": "concrete_pile",
         "soil_type": "sand",
         "peat_thickness_m": 0.0,

@@ -14,7 +14,7 @@ MODELS_DIR: Path = PROJECT_ROOT / "models"
 for _dir in (DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR):
     _dir.mkdir(parents=True, exist_ok=True)
 
-MODEL_PATH: Path = MODELS_DIR / "subsidence_xgb.joblib"
+MODEL_PATH: Path = MODELS_DIR / "subsidence_xgb.ubj"
 
 # ──────────────────── Netherlands geographic bounds ─────────────────
 NL_LAT_MIN: float = 50.75
@@ -54,6 +54,10 @@ CATEGORICAL_FEATURES: list[str] = ["foundation_type", "soil_type"]
 TARGET_COLUMN: str = "risk_class"
 
 RANDOM_STATE: int = 42
+
+# Reference year used to derive building_age = REFERENCE_YEAR - year_built.
+# Fixed rather than datetime.now().year so training is reproducible.
+REFERENCE_YEAR: int = 2026
 
 # ──────────────── Target municipalities for Phase 2 ────────────────
 # These are known high-risk areas for subsidence.

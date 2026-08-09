@@ -172,7 +172,7 @@ def _harmonize_to_schema(df: pd.DataFrame) -> pd.DataFrame:
     if "bouwjaar" in result.columns and "year_built" not in result.columns:
         result["year_built"] = result["bouwjaar"]
 
-    result["building_age"] = 2026 - result["year_built"]
+    result["building_age"] = config.REFERENCE_YEAR - result["year_built"]
 
     # Ensure correct dtypes
     for col in config.CATEGORICAL_FEATURES:

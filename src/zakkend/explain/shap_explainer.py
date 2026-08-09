@@ -51,7 +51,7 @@ class SubsidenceExplainer:
             raise ValueError("Explain one row at a time.")
 
         x_feat = build_feature_matrix(row, category_levels=self.model.category_levels)
-        probs = self.model.classifier.predict_proba(x_feat)[0]
+        probs = self.model.predict_proba(x_feat)[0]
         pred_idx = int(probs.argmax())
 
         # For multi-class XGBoost, shap_values is shape (n, n_features, n_classes)

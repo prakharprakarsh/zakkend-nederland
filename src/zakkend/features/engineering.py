@@ -15,6 +15,7 @@ def build_feature_matrix(
     df: pd.DataFrame,
     *,
     category_levels: dict[str, list[str]],
+    allow_unseen: bool = False,
 ) -> pd.DataFrame:
     """Select and encode features for modelling.
 
@@ -26,6 +27,12 @@ def build_feature_matrix(
         Vocabulary captured at training time, keyed by column name.
         Must be passed explicitly — callers that omit it get a TypeError,
         not a silent fallback that reproduces the 1-row encoding bug.
+    allow_unseen : bool
+        When False (default), raise ``UnknownCategoryError`` on any value
+        not in the training vocabulary. Set to True only for batch evaluation
+        of held-out splits where unseen categories are expected and intentional
+        (e.g., a held-out city with a different soil type). Unknown values are
+        coerced to NaN and handled by XGBoost's missing-value branch.
 
     Raises
     ------
@@ -33,7 +40,8 @@ def build_feature_matrix(
         If required feature columns are missing or `category_levels` lacks
         an entry for a categorical column.
     UnknownCategoryError
-        If an inference-time value is not in the training vocabulary.
+        If an inference-time value is not in the training vocabulary and
+        ``allow_unseen`` is False.
     """
     missing = set(config.FEATURE_COLUMNS) - set(df.columns)
     if missing:
@@ -49,7 +57,7 @@ def build_feature_matrix(
             )
         allowed = category_levels[col]
         unseen = sorted(set(values) - set(allowed))
-        if unseen:
+        if unseen and not allow_unseen:
             raise UnknownCategoryError(f"{col}: {unseen} not in training vocabulary {allowed}")
         features[col] = pd.Categorical(values, categories=allowed)
     return features
