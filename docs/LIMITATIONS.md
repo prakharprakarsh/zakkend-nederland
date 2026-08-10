@@ -10,39 +10,57 @@ and what would be needed to close the gap.
 
 **Current state.** On the real PDOK BAG grouped split (train: Gouda/Rotterdam/Zaanstad,
 test: Dordrecht), the model scores **0.092 accuracy** (macro F1 0.142) — well below the
-4-class uniform random baseline of **0.250**. Three confounds compound to produce this result.
+4-class uniform random baseline of **0.250**. This result has one root cause and two
+downstream consequences; they are not three independent confounds.
 
-**Confound 1 — soil-municipality confound.** The coordinate-based soil classifier
-(`simulate_soil_type` in `data/soil.py`) assigns one soil type per geographic bounding
-box. All three training municipalities fall in the Dutch peat belt: `soil_type = peat`
-for 100% of their buildings. Dordrecht is outside the peat belt: `soil_type = sandy_clay`
-for 100% of its buildings. `soil_type` is therefore perfectly confounded with municipality
-— it is a municipality identifier in disguise, not an independent feature signal.
+**Root cause — the coordinate classifier mislabels Dordrecht as `sandy_clay`.**
+`_classify_soil_by_coordinates` in `data/soil.py` uses a sequence of geographic rules
+with a final catch-all `return "sandy_clay"`. Dordrecht's bbox falls through every rule:
+the river-clay rule requires `lon >= 4.8` (bbox lon_max is 4.72 — gap: **0.08 deg**,
+verified by running `_classify_soil_by_coordinates` on all corners and the centroid in
+this session); the peat-belt rule requires `lat >= 51.9` (bbox lat_max is 51.83 —
+gap: **0.07 deg**). Every point in the bbox hits the catch-all and is labelled `sandy_clay`.
 
-At test time, `soil_type = sandy_clay` is absent from the frozen training vocabulary,
-is encoded as NaN, and all 974 Dordrecht test rows are routed to the same XGBoost
-missing-value branch.
+Dordrecht is in reality a peat-and-river-clay city in the Drechtsteden and one of the
+more subsidence-affected municipalities in the Netherlands. The `sandy_clay` assignment
+is an artefact of where the bounding boxes were drawn, not of its geology.
 
-**Confound 2 — zero `low`-class training examples.** The rule engine assigns risk scores
-based on peat soil and wooden pile foundations. All three training municipalities are
-100% peat. Under the rule engine, peat-zone buildings receive high risk scores; zero
-buildings score in the `low` range. The model has never seen a `low`-risk building in
-training. No synthetic anchor rows were injected to compensate for this — doing so
-would distort sample weights and contaminate a real-data evaluation.
+Bounding-box coordinates and assigned soil types, from `config.TARGET_MUNICIPALITIES`:
 
-**Confound 3 — class distribution inversion.** Training data is 76% `critical` (peat +
-wooden piles → high risk). Dordrecht is 65% `moderate` (sandy_clay → lower risk). The
-missing-value branch routes most Dordrecht rows to `critical` (the dominant training class),
-yielding 100% recall on the 37 true-critical buildings but near-zero recall on the 632
-true-moderate buildings.
+| Municipality | lon min | lat min | lon max | lat max | Soil type assigned |
+|---|---|---|---|---|---|
+| Gouda | 4.68 | 52.00 | 4.75 | 52.03 | peat (all points) |
+| Rotterdam | 4.40 | 51.88 | 4.56 | 51.96 | peat (lat ≥ 51.9) / sandy_clay (lat < 51.9) |
+| Zaanstad | 4.75 | 52.43 | 4.88 | 52.50 | peat (all points) |
+| Dordrecht | 4.62 | 51.78 | 4.72 | 51.83 | **sandy_clay — catch-all** (all points) |
 
-**Why the random-split figure (0.824) does not refute this.** The 82.5% accuracy is
+**Consequence 1 — NaN encoding of the entire test set.** `soil_type = sandy_clay` is absent
+from the frozen training vocabulary (all three training municipalities are peat). At test
+time it encodes as NaN, and all 974 Dordrecht rows are routed to the same XGBoost
+missing-value branch. This is not a generalisation failure; it is the soil classifier
+assigning a label that the training pipeline never saw.
+
+**Consequence 2 — label distribution inversion.** Because the rule engine assigns lower
+risk to `sandy_clay` buildings than to `peat` buildings, Dordrecht's true label
+distribution (65% `moderate`, 18% `low`, 13% `high`, 4% `critical`) is the inverse of
+the training distribution (76% `critical`). The missing-value branch routes most Dordrecht
+rows to `critical` (the dominant training class), yielding 100% recall on the 37
+true-critical buildings but near-zero recall on the 632 true-moderate buildings.
+
+**What the experiment actually measures.** As currently constructed the grouped split does
+not measure whether the model generalises geographically. It measures what happens when
+the soil classifier misclassifies the test city. Nudge the Dordrecht bbox 0.09 deg east
+(lon_max 4.72 → 4.81) and the classifier returns `clay`; nudge it 0.08 deg north
+(lat_max 51.83 → 51.91) and it returns `peat`. The 0.092 figure reflects a data pipeline
+error in the soil labelling, not the model's intrinsic geographic transferability.
+
+**Why the random-split figure (0.824) does not refute this.** The 82.4% accuracy is
 achieved by recovering the synthetic rule engine on held-out rows from the same
 distribution. The synthetic rule is written in terms of `soil_type`, and the same
 coordinate-based classifier generates `soil_type` for both training and test rows in the
 random split. The model memorises the rule correctly when the feature distribution is
-identical. The held-out-city result shows that when the soil-type distribution changes,
-the rule breaks down entirely.
+identical. The held-out-city result shows that when the soil-type distribution changes —
+here because the bbox placement produced the wrong label — the model collapses entirely.
 
 **Summary of the two figures** (both produced by commands run on the `hardening` branch):
 
@@ -53,23 +71,25 @@ the rule breaks down entirely.
 | 4-class uniform baseline | — | 0.250 |
 
 The 0.824 should be reported only as a pipeline integrity check. It is not evidence that
-the model has learned transferable risk assessment. The 0.092 is the honest number for
-cross-municipality generalisation on real PDOK BAG data with this feature engineering.
+the model has learned transferable risk assessment. The 0.092 reflects classifier
+mislabelling of the test city, not geographic out-of-distribution failure — though the
+distinction matters only for interpretation; the magnitude of the collapse is the same.
 
 **What's needed.** Two independent interventions are required to make the held-out-city
 evaluation meaningful:
 
 1. **Real soil data.** Replace the coordinate-based soil classifier with the PDOK BRO
-   Bodemkaart WFS (`use_soil_api=True` in `data/soil.py`). Real soil data covers all
-   municipalities; its distribution is not confounded with municipality bounding boxes.
+   Bodemkaart WFS (`use_soil_api=True` in `data/soil.py`). Real soil data is not
+   confounded with municipality bounding boxes; Dordrecht would receive its actual
+   peat/clay classification.
 
 2. **Real InSAR, groundwater, and drought data.** The same coordinate-based shortcut
    exists for every simulated feature. Replacing them with real measurements (BDK 2.0,
    BRO GLD monitoring wells, KNMI precipitation deficit API) breaks the municipality
    confound for all features simultaneously.
 
-Until these are in place, the grouped split is not a valid generalisation test. It
-is a test of whether one bbox's RNG distribution matches another bbox's RNG distribution.
+Until these are in place, the grouped split is not a valid generalisation test. It is a
+test of what happens when a coordinate rule assigns the wrong soil type to the test city.
 
 ---
 
