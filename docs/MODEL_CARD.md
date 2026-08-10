@@ -69,7 +69,7 @@ real-world generalisability. For a real-data model, performance by construction 
 | Evaluation | Command | Accuracy | What it measures |
 |---|---|---|---|
 | Random split (synthetic, 10k rows) | `python3 scripts/train.py` | **0.824** | Rule-recovery — how faithfully XGBoost reconstructs the label rule engine on held-out rows from the same synthetic distribution |
-| Held-out city (real PDOK BAG data) | `python3 scripts/train.py --split grouped` | **0.092** | Model collapse — three confounds compound: soil-type/municipality confound, zero low-class training examples, and class-distribution inversion |
+| Held-out city (real PDOK BAG data) | `python3 scripts/train.py --split grouped` | **0.092** | Model collapse — one root cause (coordinate classifier mislabels Dordrecht as `sandy_clay` via catch-all; artefact of bbox placement, not its actual peat/clay geology) and two consequences: NaN-encoding of all 974 test rows, then label-distribution inversion |
 | 4-class uniform baseline | — | **0.250** | Random baseline — the model does not beat it on the held-out city |
 
 **Random-split baselines** (synthetic 2,000-row test set):
@@ -103,12 +103,18 @@ frozen vocabulary captured at training time (`TrainedModel.category_levels`).
   mildly optimistic as a result (see `docs/LIMITATIONS.md §L5`).
 - A municipality-based grouped split (train: 2,854 real Gouda/Rotterdam/Zaanstad buildings;
   test: 974 real Dordrecht buildings from `real_data.parquet`) produces **9.2% accuracy**
-  (macro F1 0.142). This is not a generalisation estimate — three confounds compound:
-  (a) `soil_type = sandy_clay` absent from training vocabulary, encoded as NaN for all 974
-  test rows; (b) zero `low`-class training examples (the rule engine produces no low-risk
-  buildings in peat-zone municipalities); (c) class distribution inversion (training is
-  76% `critical`, Dordrecht is 65% `moderate`). These confounds cannot be disentangled
-  from this evaluation alone. See README Results for full details.
+  (macro F1 0.142). This is not a generalisation estimate — it reflects one root cause and
+  two downstream consequences. Root cause: `_classify_soil_by_coordinates` mislabels
+  Dordrecht as `sandy_clay` via the catch-all branch (bbox lon_max 4.72 misses the
+  river-clay rule by 0.08 deg; bbox lat_max 51.83 misses the peat-belt rule by 0.07 deg).
+  Dordrecht is in reality a peat-and-river-clay city in the Drechtsteden; the label is a
+  bbox placement artefact, not a reflection of its geology. Consequence 1: `sandy_clay` is
+  absent from the frozen training vocabulary, so all 974 test rows encode as NaN.
+  Consequence 2: the rule engine scores `sandy_clay` lower than `peat`, inverting the
+  label distribution (training 76% `critical`; Dordrecht 65% `moderate`). As constructed,
+  the experiment measures what happens when the soil classifier misclassifies the test city,
+  not geographic out-of-distribution generalisation. See README Results and
+  `docs/LIMITATIONS.md §L0` for full details.
 
 ---
 
@@ -169,12 +175,16 @@ experienced foundation damage.
 | `critical` | 28.0% | 100.0% | **43.8%** | 37 |
 | **Overall** | — | — | **macro F1 0.142 · accuracy 0.092** | 974 |
 
-**This is model collapse.** Three confounds compound: (1) `soil_type = sandy_clay` is
-absent from training vocabulary → all 974 Dordrecht rows are encoded as NaN and routed
-to the XGBoost missing-value branch; (2) zero `low`-class training examples — the rule
-engine produces no low-risk buildings in peat-zone municipalities, so the model has never
-learned low-risk patterns; (3) training is 76% `critical`, Dordrecht is 65% `moderate`.
-The missing-value branch routes most rows to `critical` (100% recall on 37 true-critical
+**This is model collapse driven by a soil classifier error, not geographic generalisation
+failure.** Root cause: `_classify_soil_by_coordinates` assigns `sandy_clay` to every point
+in Dordrecht's bbox via the catch-all branch — the bbox misses the river-clay rule by
+0.08 deg longitude and the peat-belt rule by 0.07 deg latitude. Dordrecht is in reality
+a peat-and-river-clay city in the Drechtsteden; the `sandy_clay` label is a bbox placement
+artefact, not its geology. Two consequences follow: (1) `sandy_clay` is absent from the
+frozen training vocabulary, so all 974 rows encode as NaN and are routed to the XGBoost
+missing-value branch; (2) the rule engine scores `sandy_clay` lower than `peat`, inverting
+the label distribution — training is 76% `critical`, Dordrecht is 65% `moderate`. The
+missing-value branch routes most rows to `critical` (100% recall on 37 true-critical
 buildings) while missing 97% of moderate and all 177 low-risk buildings.
 
 The model does not beat the 4-class uniform random baseline (0.250) on this split.
