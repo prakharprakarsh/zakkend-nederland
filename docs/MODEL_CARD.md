@@ -105,8 +105,8 @@ frozen vocabulary captured at training time (`TrainedModel.category_levels`).
   test: 974 real Dordrecht buildings from `real_data.parquet`) produces **9.2% accuracy**
   (macro F1 0.142). This is not a generalisation estimate — it reflects one root cause and
   two downstream consequences. Root cause: `_classify_soil_by_coordinates` mislabels
-  Dordrecht as `sandy_clay` via the catch-all branch (bbox lon\_max 4.72 misses the
-  river-clay rule by 0.08 deg; bbox lat\_max 51.83 misses the peat-belt rule by 0.07 deg).
+  Dordrecht as `sandy_clay` via the catch-all branch (bbox lon_max 4.72 misses the
+  river-clay rule by 0.08 deg; bbox lat_max 51.83 misses the peat-belt rule by 0.07 deg).
   Dordrecht is in reality a peat-and-river-clay city in the Drechtsteden; the label is a
   bbox placement artefact, not a reflection of its geology. Consequence 1: `sandy_clay` is
   absent from the frozen training vocabulary, so all 974 test rows encode as NaN.

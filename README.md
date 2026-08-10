@@ -230,8 +230,8 @@ in `data/soil.py` assigns `sandy_clay` to every point in Dordrecht's bounding bo
 final catch-all `return "sandy_clay"`. Dordrecht is in reality a peat-and-river-clay city in
 the Drechtsteden and one of the more subsidence-affected municipalities in the Netherlands; the
 mislabelling is an artefact of where the bounding boxes were drawn. The bbox misses the
-river-clay rule (requires `lon >= 4.8`; bbox lon\_max is 4.72 — gap: **0.08 deg**) and the
-peat-belt rule (requires `lat >= 51.9`; bbox lat\_max is 51.83 — gap: **0.07 deg**).
+river-clay rule (requires `lon >= 4.8`; bbox lon_max is 4.72 — gap: **0.08 deg**) and the
+peat-belt rule (requires `lat >= 51.9`; bbox lat_max is 51.83 — gap: **0.07 deg**).
 
 Bounding-box coordinates and assigned soil types, from `config.TARGET_MUNICIPALITIES`,
 verified by running `_classify_soil_by_coordinates` on all four corners and the centroid:
@@ -239,9 +239,9 @@ verified by running `_classify_soil_by_coordinates` on all four corners and the 
 | Municipality | lon min | lat min | lon max | lat max | Soil type assigned |
 |---|---|---|---|---|---|
 | Gouda | 4.68 | 52.00 | 4.75 | 52.03 | peat (all points) |
-| Rotterdam | 4.40 | 51.88 | 4.56 | 51.96 | peat (lat ≥ 51.9) / sandy\_clay (lat < 51.9) |
+| Rotterdam | 4.40 | 51.88 | 4.56 | 51.96 | peat (lat ≥ 51.9) / sandy_clay (lat < 51.9) |
 | Zaanstad | 4.75 | 52.43 | 4.88 | 52.50 | peat (all points) |
-| Dordrecht | 4.62 | 51.78 | 4.72 | 51.83 | **sandy\_clay — catch-all** (all points) |
+| Dordrecht | 4.62 | 51.78 | 4.72 | 51.83 | **sandy_clay — catch-all** (all points) |
 
 **Consequence 1 — NaN encoding of all 974 test rows.** `soil_type = sandy_clay` is absent
 from the frozen training vocabulary (all three training cities are peat). At test time it
@@ -257,8 +257,8 @@ the 632 true-moderate buildings and all 177 low-risk buildings.
 **What the experiment actually measures.** As currently constructed the grouped split does
 not measure whether the model generalises geographically. It measures what happens when the
 soil classifier misclassifies the test city. Nudge the Dordrecht bbox 0.09 deg east
-(lon\_max 4.72 → 4.81) and the classifier returns `clay`; nudge it 0.08 deg north
-(lat\_max 51.83 → 51.91) and it returns `peat`. The 0.092 figure reflects a data pipeline
+(lon_max 4.72 → 4.81) and the classifier returns `clay`; nudge it 0.08 deg north
+(lat_max 51.83 → 51.91) and it returns `peat`. The 0.092 figure reflects a data pipeline
 error in the soil labelling, not the model's intrinsic geographic transferability.
 
 **Per-class breakdown on Dordrecht (real data):**
