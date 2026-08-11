@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from zakkend import config
@@ -123,3 +124,45 @@ def test_shap_directions_labeled(trained_model):
     expl = explainer.explain(df)
     for c in expl.contributions:
         assert c.direction in ("↑ risk", "↓ risk")
+
+
+class TestSpacesAppPredictionPath:
+    """Regression guard for the building_age omission in spaces/app.py.
+
+    spaces/app.py bypasses api/main.py and calls the model directly. When
+    api/main.py was refactored to derive building_age server-side, spaces/app.py
+    was not updated, causing "Missing required feature columns: ['building_age']"
+    on every prediction. These tests exercise the exact DataFrame-building pattern
+    that spaces/app.py uses so a similar refactor cannot silently break the Space.
+    """
+
+    # Mirrors the `features` dict built in spaces/app.py — no building_age.
+    SPACES_FEATURES: dict = {
+        "year_built": 1925,
+        "foundation_type": "wooden_pile",
+        "soil_type": "peat",
+        "peat_thickness_m": 2.5,
+        "groundwater_depth_m": 1.1,
+        "groundwater_variability": 0.45,
+        "insar_deformation_mm_yr": 3.2,
+        "drought_exposure_index": 0.55,
+        "distance_to_water_m": 120,
+        "neighborhood_damage_rate": 0.18,
+    }
+
+    def test_derive_building_age_then_predict(self, trained_model):
+        """Derive building_age from year_built (as spaces/app.py does) and predict."""
+        df = pd.DataFrame([self.SPACES_FEATURES])
+        df["building_age"] = config.REFERENCE_YEAR - df["year_built"]
+
+        probs = trained_model.predict_proba(df)[0]
+        assert len(probs) == len(config.RISK_CLASSES)
+        assert abs(sum(probs) - 1.0) < 1e-5
+        risk_class = trained_model.class_names[int(probs.argmax())]
+        assert risk_class in config.RISK_CLASSES
+
+    def test_missing_building_age_raises(self, trained_model):
+        """Omitting building_age must raise ValueError — documents the original bug."""
+        df = pd.DataFrame([self.SPACES_FEATURES])  # no building_age column
+        with pytest.raises(ValueError, match="building_age"):
+            trained_model.predict_proba(df)
