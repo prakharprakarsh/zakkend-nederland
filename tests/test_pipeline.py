@@ -191,7 +191,7 @@ class TestPipelineSchema:
             }
         )
 
-        df = enrich_with_soil(mock_buildings, use_api=False)
+        df = enrich_with_soil(mock_buildings)
         df = enrich_with_insar(df)
         df = enrich_with_drought(df)
         df = _estimate_groundwater(df)
