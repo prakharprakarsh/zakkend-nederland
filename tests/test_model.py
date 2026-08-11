@@ -166,3 +166,26 @@ class TestSpacesAppPredictionPath:
         df = pd.DataFrame([self.SPACES_FEATURES])  # no building_age column
         with pytest.raises(ValueError, match="building_age"):
             trained_model.predict_proba(df)
+
+    def test_agent_assess_risk_with_complete_features(self, trained_model, monkeypatch):
+        """assess_risk node succeeds when features dict includes building_age.
+
+        Regression guard for spaces/app.py passing the raw sidebar dict (without
+        building_age) to agent.invoke(). After the fix, building_age is derived on
+        the features dict itself so both the model DataFrame and the agent receive
+        a complete feature set.
+        """
+        from zakkend.agent.graph import assess_risk
+        from zakkend.models.baseline import TrainedModel
+
+        # Inject the fixture model so assess_risk doesn't need to load from disk
+        monkeypatch.setattr(TrainedModel, "load", lambda *a, **kw: trained_model)
+
+        features = {
+            **self.SPACES_FEATURES,
+            "building_age": config.REFERENCE_YEAR - self.SPACES_FEATURES["year_built"],
+        }
+        state = assess_risk({"building_features": features})
+        assert state["risk_class"] in config.RISK_CLASSES
+        assert 0.0 <= state["risk_score"] <= 1.0
+        assert len(state["shap_drivers"]) == 5
