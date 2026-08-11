@@ -220,7 +220,10 @@ def enrich_with_soil(df: pd.DataFrame) -> pd.DataFrame:
     # ── BRO cache lookup (vectorised over keys) ───────────────────────────────
     cache = _load_bro_cache()
     bro_values = np.array(
-        [cache.get((round(float(la), 5), round(float(lo), 5))) for la, lo in zip(lat, lon)],
+        [
+            cache.get((round(float(la), 5), round(float(lo), 5)))
+            for la, lo in zip(lat, lon, strict=True)
+        ],
         dtype=object,
     )
     bro_mask = bro_values != None  # noqa: E711  (object array, not using 'is not None')
