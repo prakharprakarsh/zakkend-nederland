@@ -150,6 +150,7 @@ else:
     # ──────────── Run assessment ────────────
     with st.spinner("Running risk assessment..."):
         try:
+            from zakkend import config
             from zakkend.models.baseline import TrainedModel
             from zakkend.explain.shap_explainer import SubsidenceExplainer
             from zakkend.agent.graph import create_remediation_agent
@@ -158,9 +159,10 @@ else:
             model = TrainedModel.load()
             explainer = SubsidenceExplainer(model)
 
-            # Predict — building_age derived here, not from the sidebar
+            # building_age is not a sidebar input — derive it the same way
+            # api/main.py._to_dataframe does, using the frozen training constant.
             df = pd.DataFrame([features])
-            df["building_age"] = 2026 - df["year_built"]
+            df["building_age"] = config.REFERENCE_YEAR - df["year_built"]
             probs = model.predict_proba(df)[0]
             explanation = explainer.explain(df)
 
