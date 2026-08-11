@@ -12,6 +12,7 @@ Deploy to HF Spaces:
 """
 
 import sys
+import traceback
 from pathlib import Path
 
 import streamlit as st
@@ -25,6 +26,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
+
+from zakkend import config  # noqa: E402 — must follow sys.path setup
 
 
 # ──────────── Page config ────────────
@@ -89,8 +92,11 @@ with st.sidebar:
     assess_button = st.button("🔎 Assess Risk", use_container_width=True, type="primary")
 
 # ──────────── Build features dict ────────────
+# building_age is derived here so that both the model DataFrame and the agent
+# invocation receive a complete feature set (agent bypasses api/main.py).
 features = {
     "year_built": year_built,
+    "building_age": config.REFERENCE_YEAR - year_built,
     "foundation_type": foundation_type,
     "soil_type": soil_type,
     "peat_thickness_m": peat_thickness,
@@ -150,7 +156,6 @@ else:
     # ──────────── Run assessment ────────────
     with st.spinner("Running risk assessment..."):
         try:
-            from zakkend import config
             from zakkend.models.baseline import TrainedModel
             from zakkend.explain.shap_explainer import SubsidenceExplainer
             from zakkend.agent.graph import create_remediation_agent
@@ -159,10 +164,8 @@ else:
             model = TrainedModel.load()
             explainer = SubsidenceExplainer(model)
 
-            # building_age is not a sidebar input — derive it the same way
-            # api/main.py._to_dataframe does, using the frozen training constant.
+            # features already contains building_age (derived above)
             df = pd.DataFrame([features])
-            df["building_age"] = config.REFERENCE_YEAR - df["year_built"]
             probs = model.predict_proba(df)[0]
             explanation = explainer.explain(df)
 
@@ -171,14 +174,14 @@ else:
             risk_class = explanation.predicted_class
             pct = round(risk_score * 100)
 
-            # Run agent
+            # Run agent — features dict is complete (includes building_age)
             agent = create_remediation_agent()
             agent_result = agent.invoke({"building_features": features})
             report = agent_result.get("report", "Report generation failed.")
 
         except Exception as e:
-            st.error(f"Error: {e}")
-            st.info("Make sure you've trained the model first: `python scripts/train.py`")
+            st.error(f"Assessment failed: {e}")
+            st.code(traceback.format_exc(), language="python")
             st.stop()
 
     # ──────────── Display results ────────────
