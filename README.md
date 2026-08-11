@@ -62,7 +62,7 @@ real measurement:
 |---------|--------|
 | `year_built` | ✅ PDOK BAG `bouwjaar` (measured) |
 | `building_age` | ↳ Arithmetic derivative of `year_built` (`2026 − year_built`) |
-| `soil_type` | ⚠️ Hybrid: BRO Bodemkaart spatial join — PDOK GeoPackage CC0 (29.5% of buildings; cached in `data/raw/bro_soil_cache.parquet`) + coordinate-based rule fallback (70.5%; urban hardscape not covered by the 1:50 000 rural map) |
+| `soil_type` | ⚠️ Hybrid: BRO Bodemkaart spatial join — PDOK GeoPackage CC0 (1,031 of 3,828 buildings = 26.9%; cached in `data/raw/bro_soil_cache.parquet`) + coordinate-based rule fallback (73.1%; urban hardscape not covered by the 1:50 000 rural map) |
 | `peat_thickness_m` | ❌ `np.random.default_rng` seeded by coordinates, priors from TNO thickness ranges |
 | `groundwater_depth_m` | ❌ `np.random.default_rng(42)`, draws from soil-type normal distributions |
 | `groundwater_variability` | ❌ `np.random.default_rng(42)`, draws from soil-type beta distributions |
@@ -333,8 +333,8 @@ points:
 
 - **Labels are synthetic.** Accuracy measures rule-recovery, not predictive skill.
 - **8 of 11 features are fully simulated** from domain-informed random number generators,
-  not measured from instruments or registers. `soil_type` is hybrid (29.5% BRO Bodemkaart
-  spatial join, 70.5% coordinate rule).
+  not measured from instruments or registers. `soil_type` is hybrid (26.9% BRO Bodemkaart
+  spatial join — 1,031 of 3,828 buildings; 73.1% coordinate rule).
 - **No postcode lookup.** The UI accepts 11 manual numeric inputs; there is no
   geocoder.
 - **No probability calibration.** The model outputs raw XGBoost softmax scores.

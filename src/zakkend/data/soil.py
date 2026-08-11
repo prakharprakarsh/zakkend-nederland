@@ -15,9 +15,18 @@ GeoPackage is only needed to regenerate the cache or extend it to new buildings.
 Coverage
 --------
 The BRO Bodemkaart at 1:50 000 does not map urban hardscape, water bodies, or
-infrastructure zones. In the four target municipalities, 29.5% of buildings (1,128 of
-3,828) fell inside a soil polygon; the remaining 70.5% fall back to the coordinate rule.
-Both the soil type and the lookup source are recorded per building.
+infrastructure zones. Of 3,828 buildings in real_data.parquet, 1,031 (26.9%) received a
+BRO soil label; the remaining 2,797 (73.1%) fall back to the coordinate rule. The cache
+parquet contains 1,128 unique coordinate entries — 97 more than matched in the pipeline
+because coordinate rounding differs slightly between the GeoPackage centroid coordinates
+and the BAG WFS geometry centroids. Both the soil type and the lookup source ('BRO' or
+'coord_rule') are recorded per building in the soil_source column.
+
+Per-municipality BRO match rate (real_data.parquet):
+    Dordrecht  483 / 974  (49.6%)
+    Zaanstad   383 / 975  (39.3%)
+    Rotterdam   91 / 932  ( 9.8%)
+    Gouda       74 / 947  ( 7.8%)
 
 Coordinate fallback
 -------------------

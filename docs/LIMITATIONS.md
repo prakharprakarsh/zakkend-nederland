@@ -95,9 +95,11 @@ different test-set label distributions; they are not measuring the same classifi
 **What's needed.** To make the held-out-city evaluation a valid generalisation test:
 
 1. **Real soil data** ✅ **Partially done.** BRO Bodemkaart GeoPackage spatial join now
-   provides real soil labels for 29.5% of buildings (1,128 of 3,828). The remaining 70.5%
-   fall back to the coordinate rule — these are building centroids in urban hardscape and
-   infrastructure zones not covered by the 1:50,000 rural map.
+   provides real soil labels for 1,031 of 3,828 buildings (26.9%). The remaining 2,797
+   (73.1%) fall back to the coordinate rule — building centroids in urban hardscape and
+   infrastructure zones not covered by the 1:50,000 rural map. Per-municipality BRO match
+   rate: Dordrecht 483/974 (49.6%), Zaanstad 383/975 (39.3%), Rotterdam 91/932 (9.8%),
+   Gouda 74/947 (7.8%).
 
 2. **Real InSAR, groundwater, and drought data.** The same coordinate-based shortcut
    exists for every other simulated feature. Replacing them with real measurements (BDK 2.0,
@@ -131,18 +133,22 @@ real supervision.
 
 ---
 
-## L2 — 8 of 11 features fully simulated; soil_type is hybrid (29.5% BRO, 70.5% coord-rule)
+## L2 — 8 of 11 features fully simulated; soil_type is hybrid (26.9% BRO, 73.1% coord-rule)
 
 **Current state.** Only `year_built` (BAG `bouwjaar`) is a directly measured feature
 from a real government registry. `building_age` is computed arithmetically from
 `year_built` (`2026 − year_built`) — it does not come from any data source and adds
 no independent information. The building centroid (`lat`/`lon`) is also a real BAG
 measurement but is not a model feature; it drives the coordinate-based estimators.
-`soil_type` is now a hybrid: 29.5% of buildings (1,128 of 3,828) receive a real BRO
+`soil_type` is now a hybrid: 1,031 of 3,828 buildings (26.9%) receive a real BRO
 Bodemkaart classification from a spatial join against the PDOK GeoPackage; the remaining
-70.5% fall back to the coordinate rule (urban hardscape not covered by the 1:50,000 rural
-map). The remaining 8 model features are produced by domain-informed random number
-generators. See the feature table in the README.
+2,797 (73.1%) fall back to the coordinate rule (urban hardscape not covered by the
+1:50,000 rural map). The cache parquet (data/raw/bro_soil_cache.parquet) contains 1,128
+unique coordinate entries — 97 more than matched in the pipeline, because coordinate
+rounding differs slightly between the GeoPackage spatial join and the BAG WFS centroids.
+Per-municipality BRO match rate: Dordrecht 483/974 (49.6%), Zaanstad 383/975 (39.3%),
+Rotterdam 91/932 (9.8%), Gouda 74/947 (7.8%). The remaining 8 model features are produced
+by domain-informed random number generators. See the feature table in the README.
 
 **Why it matters.** The model is learning from simulated measurements of simulated
 labels. Domain patterns (peat + wooden pile → higher risk) are encoded correctly,
@@ -154,7 +160,7 @@ source that provides real measurements:
 
 | Feature | Real source |
 |---------|-------------|
-| `soil_type` | ✅ Partially done: BRO Bodemkaart GeoPackage spatial join (29.5% coverage). Remainder needs BRO SoilInvestigation API or higher-resolution urban soil mapping. |
+| `soil_type` | ✅ Partially done: BRO Bodemkaart GeoPackage spatial join (26.9% of buildings, 1,031/3,828). Remainder needs BRO SoilInvestigation API or higher-resolution urban soil mapping. |
 | `peat_thickness_m` | TNO DINOloket |
 | `groundwater_depth_m/variability` | BRO Grondwaterstandonderzoek (GLD) monitoring wells |
 | `insar_deformation_mm_yr` | BodemDalingsKaart 2.0 WMS |
