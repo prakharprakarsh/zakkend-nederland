@@ -25,9 +25,11 @@ in `docs/AUDIT.md` (§0.1, §1.7, ...) are referenced in commit messages.
 2. **Labels are synthetic and derived from `synthetic._compute_risk_score`.** Reported accuracy
    measures rule-recovery, not real-world predictive skill. Never describe metrics as predictive
    performance. Any new doc text about metrics must carry this caveat.
-3. **9 of 11 features are simulated** (`np.random.default_rng`), not measured. Only `year_built`
-   and the lat/lon centroid come from PDOK BAG. Functions that simulate should be named
-   `simulate_*`, not `estimate_*` or `enrich_*`.
+3. **8 of 11 features are fully simulated** (`np.random.default_rng`), not measured. Only
+   `year_built` and the lat/lon centroid come from PDOK BAG. `soil_type` is hybrid: BRO
+   Bodemkaart GeoPackage spatial join (29.5% of buildings, cached in
+   `data/raw/bro_soil_cache.parquet`) + coordinate-based rule fallback (70.5%). Functions
+   that simulate should be named `simulate_*`, not `estimate_*` or `enrich_*`.
 4. **Categorical encoding.** `foundation_type` and `soil_type` MUST be encoded against a frozen
    vocabulary captured at training time (`TrainedModel.category_levels`). Never call
    `.astype("category")` on an inference-time frame without passing explicit categories — a 1-row

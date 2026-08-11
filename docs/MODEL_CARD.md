@@ -35,8 +35,9 @@ architecture, and domain experts interested in geospatial risk modelling for Dut
 - Serve as input to any regulated decision-making process
 - Replace inspection by a qualified structural engineer (*funderingsadviseur*)
 
-The labels are synthetic, 9 of 11 features are simulated, and the model has never been
-validated against any real-world ground truth.
+The labels are synthetic, 8 of 11 features are fully simulated (`soil_type` is hybrid:
+29.5% BRO Bodemkaart, 70.5% coordinate rule), and the model has never been validated
+against any real-world ground truth.
 
 ---
 
@@ -62,15 +63,16 @@ real-world generalisability. For a real-data model, performance by construction 
 | **Primary metric** | Multiclass accuracy |
 | **Secondary metrics** | Per-class precision, recall, F1; macro F1; weighted F1 |
 | **Decision threshold** | `argmax` over 4-class softmax output |
-| **What the metric measures** | **Rule-recovery** on synthetic data (random split); **model collapse** on real held-out city data |
+| **What the metric measures** | **Rule-recovery** on synthetic data (random split); **partial OOD test** on real held-out city data (after BRO soil integration) |
 
 **The two reported accuracy figures are not comparable evidence of the same thing.**
 
 | Evaluation | Command | Accuracy | What it measures |
 |---|---|---|---|
 | Random split (synthetic, 10k rows) | `python3 scripts/train.py` | **0.824** | Rule-recovery — how faithfully XGBoost reconstructs the label rule engine on held-out rows from the same synthetic distribution |
-| Held-out city (real PDOK BAG data) | `python3 scripts/train.py --split grouped` | **0.092** | Model collapse — one root cause (coordinate classifier mislabels Dordrecht as `sandy_clay` via catch-all; artefact of bbox placement, not its actual peat/clay geology) and two consequences: NaN-encoding of all 974 test rows, then label-distribution inversion |
-| 4-class uniform baseline | — | **0.250** | Random baseline — the model does not beat it on the held-out city |
+| Held-out city — before BRO (real PDOK BAG data) | `python3 scripts/train.py --split grouped` | **0.092** | Soil classifier error — all 974 rows NaN-encoded; test labels: low 177, mod 632, high 128, crit 37 |
+| Held-out city — after BRO (real PDOK BAG data) | `python3 scripts/train.py --split grouped` | **0.614** | Different label set (low 103, mod 640, high 175, crit 56); 50% real soil; majority class (mod) = 0.657 > model |
+| 4-class uniform baseline | — | **0.250** | Random baseline |
 
 **Random-split baselines** (synthetic 2,000-row test set):
 
@@ -101,20 +103,18 @@ frozen vocabulary captured at training time (`TrainedModel.category_levels`).
 - `neighborhood_damage_rate` is assigned per spatial hash bucket, so buildings in the
   same ~2 km cell share a feature value across the split — the reported accuracy is
   mildly optimistic as a result (see `docs/LIMITATIONS.md §L5`).
-- A municipality-based grouped split (train: 2,854 real Gouda/Rotterdam/Zaanstad buildings;
-  test: 974 real Dordrecht buildings from `real_data.parquet`) produces **9.2% accuracy**
-  (macro F1 0.142). This is not a generalisation estimate — it reflects one root cause and
-  two downstream consequences. Root cause: `_classify_soil_by_coordinates` mislabels
-  Dordrecht as `sandy_clay` via the catch-all branch (bbox lon_max 4.72 misses the
-  river-clay rule by 0.08 deg; bbox lat_max 51.83 misses the peat-belt rule by 0.07 deg).
-  Dordrecht is in reality a peat-and-river-clay city in the Drechtsteden; the label is a
-  bbox placement artefact, not a reflection of its geology. Consequence 1: `sandy_clay` is
-  absent from the frozen training vocabulary, so all 974 test rows encode as NaN.
-  Consequence 2: the rule engine scores `sandy_clay` lower than `peat`, inverting the
-  label distribution (training 76% `critical`; Dordrecht 65% `moderate`). As constructed,
-  the experiment measures what happens when the soil classifier misclassifies the test city,
-  not geographic out-of-distribution generalisation. See README Results and
-  `docs/LIMITATIONS.md §L0` for full details.
+- A municipality-based grouped split (train: 2,283 real Gouda/Rotterdam/Zaanstad buildings;
+  test: 974 real Dordrecht buildings from `real_data.parquet`) produced **9.2% accuracy**
+  (macro F1 0.142) before BRO Bodemkaart integration. After integrating the BRO GeoPackage
+  spatial join, accuracy improved to **61.4%** (macro F1 0.480). Root cause of the original
+  collapse: `_classify_soil_by_coordinates` mislabelled Dordrecht as `sandy_clay` via the
+  catch-all branch (bbox lon_max 4.72 misses the river-clay rule by 0.08 deg; bbox lat_max
+  51.83 misses the peat-belt rule by 0.07 deg). Dordrecht is in reality a peat-and-river-clay
+  city in the Drechtsteden. BRO integration resolved Consequence 1 (NaN encoding — `sandy_clay`
+  now in vocabulary from Zaanstad) and partially resolved Consequence 2 (483/974 buildings now
+  classified as `clay` from BRO; 491 still `sandy_clay` via coord-rule fallback for urban
+  hardscape). The 0.614 figure is not a generalisation estimate; 8 of 11 features remain
+  coordinate-based. See README Results and `docs/LIMITATIONS.md §L0` for full details.
 
 ---
 
@@ -125,8 +125,8 @@ frozen vocabulary captured at training time (`TrainedModel.category_levels`).
 
 - Coordinates sampled within Netherlands bounding box (51.9°N–53.1°N, 4.1°E–6.9°E)
 - `year_built` sampled uniformly from 1880–2023
-- 9 features generated by domain-informed RNGs (soil priors from TNO, InSAR rates
-  from BodemDalingsKaart published means, etc.)
+- 8 features generated by domain-informed RNGs (InSAR rates from BodemDalingsKaart published
+  means, groundwater norms from soil type, etc.); `soil_type` is hybrid (see Phase 2 pipeline)
 - Labels assigned by `synthetic._compute_risk_score`: a deterministic weighted sum
   plus Gaussian noise, thresholded at three fixed cutoffs
 
@@ -137,7 +137,7 @@ frozen vocabulary captured at training time (`TrainedModel.category_levels`).
 | `year_built` | ✅ PDOK BAG `bouwjaar` in Phase 2 pipeline; synthetic in training |
 | `building_age` | ↳ Arithmetic derivative of `year_built` (`2026 − year_built`) |
 | `foundation_type` | ❌ `rng.choice` weighted by construction era and soil type |
-| `soil_type` | ⚠️ Coordinate-based rule engine (BRO API exists but disabled by default) |
+| `soil_type` | ⚠️ Hybrid: BRO Bodemkaart GeoPackage spatial join (29.5% of buildings, CC0) + coordinate-based rule fallback (70.5%; urban hardscape not mapped at 1:50 000) |
 | `peat_thickness_m` | ❌ `rng` seeded by coordinates, TNO priors |
 | `groundwater_depth_m` | ❌ `rng.normal` by soil type |
 | `groundwater_variability` | ❌ `rng.beta` by soil type |
@@ -165,30 +165,41 @@ experienced foundation damage.
 | `critical` | 89.6% | 85.3% | 87.4% | 334 |
 | **Overall** | — | — | **macro F1 0.797** | 2000 |
 
-**Per-class performance — grouped split** (Dordrecht holdout, 974 real PDOK BAG buildings):
+**Per-class performance — grouped split, after BRO integration** (Dordrecht holdout, 974 real PDOK BAG buildings):
 
 | Class | Precision | Recall | F1 | Support |
 |---|---|---|---|---|
-| `low` | 0.0% | 0.0% | **0.0%** | 177 |
-| `moderate` | 51.4% | 3.0% | **5.7%** | 632 |
-| `high` | 4.2% | 26.6% | **7.3%** | 128 |
-| `critical` | 28.0% | 100.0% | **43.8%** | 37 |
-| **Overall** | — | — | **macro F1 0.142 · accuracy 0.092** | 974 |
+| `low` | 7.7% | 13.6% | **9.8%** | 103 |
+| `moderate` | 74.5% | 77.2% | **75.8%** | 640 |
+| `high` | 66.7% | 36.6% | **47.2%** | 175 |
+| `critical` | 81.2% | 46.4% | **59.1%** | 56 |
+| **Overall** | — | — | **macro F1 0.480 · accuracy 0.614** | 974 |
 
-**This is model collapse driven by a soil classifier error, not geographic generalisation
-failure.** Root cause: `_classify_soil_by_coordinates` assigns `sandy_clay` to every point
-in Dordrecht's bbox via the catch-all branch — the bbox misses the river-clay rule by
-0.08 deg longitude and the peat-belt rule by 0.07 deg latitude. Dordrecht is in reality
-a peat-and-river-clay city in the Drechtsteden; the `sandy_clay` label is a bbox placement
-artefact, not its geology. Two consequences follow: (1) `sandy_clay` is absent from the
-frozen training vocabulary, so all 974 rows encode as NaN and are routed to the XGBoost
-missing-value branch; (2) the rule engine scores `sandy_clay` lower than `peat`, inverting
-the label distribution — training is 76% `critical`, Dordrecht is 65% `moderate`. The
-missing-value branch routes most rows to `critical` (100% recall on 37 true-critical
-buildings) while missing 97% of moderate and all 177 low-risk buildings.
+**The before and after figures are not on the same test labels.** The rule engine derives labels
+from `soil_type`; changing Dordrecht's soil classifications shifts the test-set class distribution:
+`low` 177 → 103, `moderate` 632 → 640, `high` 128 → 175, `critical` 37 → 56. The 0.092 and
+0.614 measure different classification problems.
 
-The model does not beat the 4-class uniform random baseline (0.250) on this split.
-See `docs/LIMITATIONS.md §L0` and README Results for the full explanation.
+**Before BRO integration: accuracy 0.092, macro F1 0.142 (below the 0.250 uniform baseline).**
+Root cause: `_classify_soil_by_coordinates` assigned `sandy_clay` to every point in Dordrecht's
+bbox via the catch-all branch — the bbox misses the river-clay rule by 0.08 deg longitude and the
+peat-belt rule by 0.07 deg latitude. Dordrecht is in reality a peat-and-river-clay city in the
+Drechtsteden; the `sandy_clay` label was a bbox placement artefact. Two consequences: (1) `sandy_clay`
+absent from the frozen vocabulary — all 974 rows encoded as NaN; (2) rule engine assigned lower risk
+to `sandy_clay` than `peat`, inverting the label distribution.
+
+**After BRO integration:** the spatial join corrects 483/974 Dordrecht buildings to `clay`.
+Dordrecht's soil is approximately 50% real (483 BRO-joined) and 50% coordinate-rule fallback
+(491 urban-hardscape buildings). The 0.614 figure is computed on partially real soil.
+
+**`low` class: 14 of 103 true-`low` buildings correctly identified; 183 total predicted as
+`low` (precision 7.7%, recall 13.6%, F1 9.8%).** The headline macro F1 of 0.480 is carried
+by `moderate` alone (F1 75.8%); the three remaining classes average F1 0.387. **Majority-class
+reference point** (not a legitimate baseline — requires test labels): 640/974 Dordrecht buildings
+are `moderate` = **0.657**. A constant `moderate` predictor would outperform the model's 0.614
+on this test set.
+
+See `docs/LIMITATIONS.md §L0` and README Results for full before/after details.
 
 On the random split, sample weights improve `low` F1 from 0.603 → 0.680 (+7.7 pp)
 with no meaningful loss on `moderate`.

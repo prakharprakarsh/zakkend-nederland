@@ -6,12 +6,14 @@ and what would be needed to close the gap.
 
 ---
 
-## L0 — Model collapses on an unseen city; random-split accuracy is not evidence of generalisation
+## L0 — Grouped-split accuracy: 0.092 (before BRO) → 0.614 (after BRO); held-out-city evaluation is not a valid generalisation test
 
 **Current state.** On the real PDOK BAG grouped split (train: Gouda/Rotterdam/Zaanstad,
-test: Dordrecht), the model scores **0.092 accuracy** (macro F1 0.142) — well below the
-4-class uniform random baseline of **0.250**. This result has one root cause and two
-downstream consequences; they are not three independent confounds.
+test: Dordrecht), the model scored **0.092 accuracy** (macro F1 0.142) before BRO Bodemkaart
+integration — well below the 4-class uniform random baseline of **0.250**. After integrating
+the BRO Bodemkaart GeoPackage spatial join, accuracy improved to **0.614** (macro F1 0.480),
+above all baselines. This result has one root cause and two downstream consequences; they are
+not three independent confounds.
 
 **Root cause — the coordinate classifier mislabels Dordrecht as `sandy_clay`.**
 `_classify_soil_by_coordinates` in `data/soil.py` uses a sequence of geographic rules
@@ -34,62 +36,77 @@ Bounding-box coordinates and assigned soil types, from `config.TARGET_MUNICIPALI
 | Zaanstad | 4.75 | 52.43 | 4.88 | 52.50 | peat (all points) |
 | Dordrecht | 4.62 | 51.78 | 4.72 | 51.83 | **sandy_clay — catch-all** (all points) |
 
-**Consequence 1 — NaN encoding of the entire test set.** `soil_type = sandy_clay` is absent
-from the frozen training vocabulary (all three training municipalities are peat). At test
-time it encodes as NaN, and all 974 Dordrecht rows are routed to the same XGBoost
-missing-value branch. This is not a generalisation failure; it is the soil classifier
-assigning a label that the training pipeline never saw.
+**The before and after figures are not on the same test labels.** The rule engine derives labels
+from `soil_type`; changing Dordrecht's soil classifications shifts the test-set class distribution:
+`low` 177 → 103, `moderate` 632 → 640, `high` 128 → 175, `critical` 37 → 56. The 0.092 and
+0.614 figures measure different classification problems.
 
-**Consequence 2 — label distribution inversion.** Because the rule engine assigns lower
-risk to `sandy_clay` buildings than to `peat` buildings, Dordrecht's true label
-distribution (65% `moderate`, 18% `low`, 13% `high`, 4% `critical`) is the inverse of
-the training distribution (76% `critical`). The missing-value branch routes most Dordrecht
-rows to `critical` (the dominant training class), yielding 100% recall on the 37
-true-critical buildings but near-zero recall on the 632 true-moderate buildings.
+**Consequence 1 — NaN encoding of the entire test set [RESOLVED by BRO integration].**
+Before BRO, `soil_type = sandy_clay` was absent from the frozen training vocabulary (all three
+training cities peat-dominant). At test time it encoded as NaN, routing all 974 Dordrecht rows
+to the XGBoost missing-value branch. After BRO, `sandy_clay` enters the training vocabulary
+from Zaanstad (167 buildings) and `clay` from 132 buildings across training cities; neither
+encodes as NaN.
 
-**What the experiment actually measures.** As currently constructed the grouped split does
-not measure whether the model generalises geographically. It measures what happens when
-the soil classifier misclassifies the test city. Nudge the Dordrecht bbox 0.09 deg east
-(lon_max 4.72 → 4.81) and the classifier returns `clay`; nudge it 0.08 deg north
-(lat_max 51.83 → 51.91) and it returns `peat`. The 0.092 figure reflects a data pipeline
-error in the soil labelling, not the model's intrinsic geographic transferability.
+**Consequence 2 — label distribution inversion [PARTIALLY RESOLVED].** The rule engine assigns
+lower risk to `sandy_clay` than to `peat`. Before BRO, all 974 Dordrecht rows were `sandy_clay`,
+producing 65% `moderate`/18% `low` labels — the inverse of the training distribution (76%
+`critical`). After BRO, 483 of 974 Dordrecht buildings receive `clay` from the BRO spatial join
+(Zeekleigronden / Rivierkleigronden, consistent with Dordrecht's actual Holocene geology). The
+remaining 491 receive `sandy_clay` via the coordinate-rule fallback (urban hardscape not covered
+by the 1:50,000 rural map). **Dordrecht's soil is approximately 50% real (483 BRO) and 50%
+coordinate-rule (491 fallback); the 0.614 figure is computed on partially real soil.**
+
+**`low` class: 14 of 103 true-`low` buildings correctly identified; 183 total buildings
+predicted as `low` (precision 7.7%, recall 13.6%, F1 9.8%).** The headline macro F1 of 0.480
+is carried almost entirely by `moderate` (F1 75.8%); the three remaining classes average
+F1 0.387. **Majority-class reference point** (not a legitimate baseline — requires test labels):
+640/974 Dordrecht buildings are `moderate` = **0.657**. A constant `moderate` predictor would
+outperform the model's 0.614 on this test set; the model adds no value over the majority class
+on this particular held-out city.
+
+**What the experiment now measures.** After BRO integration the grouped split is a partial
+OOD test: soil type is now partially real (BRO for 49.6% of Dordrecht buildings), but the
+remaining 8 features (InSAR deformation, groundwater depth/variability, drought exposure,
+distance to water, neighbourhood damage rate, foundation type, peat thickness) are still
+derived from coordinate-based estimators confounded with municipality geography. The 0.614
+accuracy should not be read as evidence of real-world generalisation; it reflects improved
+data quality for one of eleven features.
 
 **Why the random-split figure (0.824) does not refute this.** The 82.4% accuracy is
 achieved by recovering the synthetic rule engine on held-out rows from the same
-distribution. The synthetic rule is written in terms of `soil_type`, and the same
-coordinate-based classifier generates `soil_type` for both training and test rows in the
-random split. The model memorises the rule correctly when the feature distribution is
-identical. The held-out-city result shows that when the soil-type distribution changes —
-here because the bbox placement produced the wrong label — the model collapses entirely.
+distribution. The model memorises the rule correctly when the feature distribution is
+identical. The held-out-city result shows the limit of that rule-recovery when even one
+feature's distribution (soil type) changes across cities.
 
-**Summary of the two figures** (both produced by commands run on the `hardening` branch):
+**Summary of results** (both produced by commands run on the `hardening` branch):
 
-| | Command | Accuracy |
-|---|---|---|
-| Random split (synthetic) | `python3 scripts/train.py` | 0.824 |
-| Held-out city (real data) | `python3 scripts/train.py --split grouped` | **0.092** |
-| 4-class uniform baseline | — | 0.250 |
+| | Command | Accuracy | Macro F1 | Notes |
+|---|---|---|---|---|
+| Random split (synthetic) | `python3 scripts/train.py` | 0.824 | 0.797 | — |
+| Held-out city — before BRO | `python3 scripts/train.py --split grouped` | 0.092 | 0.142 | All 974 rows NaN-encoded |
+| Held-out city — after BRO | `python3 scripts/train.py --split grouped` | **0.614** | **0.480** | Different label set; 640/974 `moderate` (0.657) |
+| 4-class uniform baseline | — | 0.250 | — | — |
 
 The 0.824 should be reported only as a pipeline integrity check. It is not evidence that
-the model has learned transferable risk assessment. The 0.092 reflects classifier
-mislabelling of the test city, not geographic out-of-distribution failure — though the
-distinction matters only for interpretation; the magnitude of the collapse is the same.
+the model has learned transferable risk assessment. The before/after grouped-split rows use
+different test-set label distributions; they are not measuring the same classification problem.
 
-**What's needed.** Two independent interventions are required to make the held-out-city
-evaluation meaningful:
+**What's needed.** To make the held-out-city evaluation a valid generalisation test:
 
-1. **Real soil data.** Replace the coordinate-based soil classifier with the PDOK BRO
-   Bodemkaart WFS (`use_soil_api=True` in `data/soil.py`). Real soil data is not
-   confounded with municipality bounding boxes; Dordrecht would receive its actual
-   peat/clay classification.
+1. **Real soil data** ✅ **Partially done.** BRO Bodemkaart GeoPackage spatial join now
+   provides real soil labels for 29.5% of buildings (1,128 of 3,828). The remaining 70.5%
+   fall back to the coordinate rule — these are building centroids in urban hardscape and
+   infrastructure zones not covered by the 1:50,000 rural map.
 
 2. **Real InSAR, groundwater, and drought data.** The same coordinate-based shortcut
-   exists for every simulated feature. Replacing them with real measurements (BDK 2.0,
-   BRO GLD monitoring wells, KNMI precipitation deficit API) breaks the municipality
+   exists for every other simulated feature. Replacing them with real measurements (BDK 2.0,
+   BRO GLD monitoring wells, KNMI precipitation deficit API) would break the municipality
    confound for all features simultaneously.
 
-Until these are in place, the grouped split is not a valid generalisation test. It is a
-test of what happens when a coordinate rule assigns the wrong soil type to the test city.
+Until these are in place, the grouped split is not a valid generalisation test. The 0.614
+figure reflects partial data-quality improvement for one feature, not geographic OOD
+performance.
 
 ---
 
@@ -104,7 +121,8 @@ thresholded at three fixed cutoffs, with a `N(0, 0.05)` noise term.
 how faithfully XGBoost reconstructs the rule engine. The ~17% gap from perfect is almost
 entirely the noise term straddling the thresholds. This is a valid pipeline integrity
 check but should not be described as evidence of real-world predictive skill. See §L0
-for why the held-out-city result (0.092) shows the rule-recovery does not transfer.
+for why the held-out-city result (0.614 after BRO integration) is still not a valid
+generalisation test.
 
 **What's needed.** Weak supervision from KCAF / municipal *funderingsrisico* zone
 polygons would provide the first real, defensible labels. Labelling buildings by
@@ -113,15 +131,18 @@ real supervision.
 
 ---
 
-## L2 — 9 of 11 features are simulated
+## L2 — 8 of 11 features fully simulated; soil_type is hybrid (29.5% BRO, 70.5% coord-rule)
 
 **Current state.** Only `year_built` (BAG `bouwjaar`) is a directly measured feature
 from a real government registry. `building_age` is computed arithmetically from
 `year_built` (`2026 − year_built`) — it does not come from any data source and adds
 no independent information. The building centroid (`lat`/`lon`) is also a real BAG
 measurement but is not a model feature; it drives the coordinate-based estimators.
-The remaining 9 model features are produced by domain-informed random number generators.
-See the feature table in the README.
+`soil_type` is now a hybrid: 29.5% of buildings (1,128 of 3,828) receive a real BRO
+Bodemkaart classification from a spatial join against the PDOK GeoPackage; the remaining
+70.5% fall back to the coordinate rule (urban hardscape not covered by the 1:50,000 rural
+map). The remaining 8 model features are produced by domain-informed random number
+generators. See the feature table in the README.
 
 **Why it matters.** The model is learning from simulated measurements of simulated
 labels. Domain patterns (peat + wooden pile → higher risk) are encoded correctly,
@@ -133,7 +154,7 @@ source that provides real measurements:
 
 | Feature | Real source |
 |---------|-------------|
-| `soil_type` | PDOK BRO Bodemkaart WFS (`use_soil_api=True`) |
+| `soil_type` | ✅ Partially done: BRO Bodemkaart GeoPackage spatial join (29.5% coverage). Remainder needs BRO SoilInvestigation API or higher-resolution urban soil mapping. |
 | `peat_thickness_m` | TNO DINOloket |
 | `groundwater_depth_m/variability` | BRO Grondwaterstandonderzoek (GLD) monitoring wells |
 | `insar_deformation_mm_yr` | BodemDalingsKaart 2.0 WMS |
@@ -190,9 +211,10 @@ optimistic as a result. In a real deployment, you would never see a test buildin
 neighbourhood rate at training time.
 
 **What's needed.** A municipality-based grouped split has been added (`--split grouped`)
-and reveals the problem explicitly: the held-out-city result (0.092) is well below the
-4-class uniform baseline (0.250). The gap cannot be closed without real soil, groundwater,
-and InSAR data that are not confounded with municipality geography — see §L0.
+and reveals the soil-classifier root cause: before BRO integration the held-out-city result
+(0.092) was well below the 4-class uniform baseline (0.250); after BRO integration it
+improved to 0.614 (macro F1 0.480). The remaining gap requires real groundwater, InSAR, and
+drought data not confounded with municipality geography — see §L0.
 
 ---
 
