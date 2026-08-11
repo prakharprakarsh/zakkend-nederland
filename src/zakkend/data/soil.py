@@ -47,23 +47,23 @@ logger = logging.getLogger(__name__)
 # Mapping from BRO GeoPackage mainsoilclassification (Dutch) to our five categories.
 # Built from the soilarea → soilarea_soilunit → soil_units join in the GeoPackage.
 _MAINSOIL_TO_SIMPLE: dict[str, str] = {
-    "Veengronden":                       "peat",
-    "Moerige gronden":                   "peat",
-    "Zeekleigronden":                    "clay",
-    "Rivierkleigronden":                 "clay",
-    "Niet-gerijpte minerale gronden":    "clay",
-    "Oude rivierkleigronden":            "clay",
-    "Zeer oude mariene afzettingen":     "clay",
-    "Kalkloze zandgronden":              "sand",
-    "Kalkhoudende zandgronden":          "sand",
-    "Podzolgronden":                     "sand",
-    "Dikke eerdgronden":                 "sand",
-    "Leemgronden":                       "loess",
-    "Brikgronden":                       "loess",
-    "Kalksteen verweringsgronden":       "loess",
-    "Keileemgronden":                    "sandy_clay",
+    "Veengronden": "peat",
+    "Moerige gronden": "peat",
+    "Zeekleigronden": "clay",
+    "Rivierkleigronden": "clay",
+    "Niet-gerijpte minerale gronden": "clay",
+    "Oude rivierkleigronden": "clay",
+    "Zeer oude mariene afzettingen": "clay",
+    "Kalkloze zandgronden": "sand",
+    "Kalkhoudende zandgronden": "sand",
+    "Podzolgronden": "sand",
+    "Dikke eerdgronden": "sand",
+    "Leemgronden": "loess",
+    "Brikgronden": "loess",
+    "Kalksteen verweringsgronden": "loess",
+    "Keileemgronden": "sandy_clay",
     "Zeer oude fluviatiele afzettingen": "sandy_clay",
-    "Gedefinieerde associaties":         "sandy_clay",
+    "Gedefinieerde associaties": "sandy_clay",
 }
 
 # Lazy singleton — loaded once on first call to lookup_bro_soil().
@@ -229,10 +229,10 @@ def enrich_with_soil(df: pd.DataFrame) -> pd.DataFrame:
     conditions = [
         (lat < 51.0) & (lon > 5.7),
         lon < 4.4,
-        (51.9 <= lat) & (lat <= 52.5) & (4.4 <= lon) & (lon <= 5.2),
-        (52.6 <= lat) & (lat <= 53.2) & (5.3 <= lon) & (lon <= 6.2),
-        (52.4 <= lat) & (lat <= 52.55) & (4.7 <= lon) & (lon <= 4.9),
-        (51.75 <= lat) & (lat <= 52.05) & (4.8 <= lon) & (lon <= 6.0),
+        (lat >= 51.9) & (lat <= 52.5) & (lon >= 4.4) & (lon <= 5.2),
+        (lat >= 52.6) & (lat <= 53.2) & (lon >= 5.3) & (lon <= 6.2),
+        (lat >= 52.4) & (lat <= 52.55) & (lon >= 4.7) & (lon <= 4.9),
+        (lat >= 51.75) & (lat <= 52.05) & (lon >= 4.8) & (lon <= 6.0),
         lon < 5.0,
         lon > 5.5,
     ]
@@ -251,12 +251,14 @@ def enrich_with_soil(df: pd.DataFrame) -> pd.DataFrame:
         thicknesses[i] = _estimate_peat_thickness("peat", float(lat[i]), float(lon[i]))
     result["peat_thickness_m"] = np.round(thicknesses, 2)
 
-    bro_n   = int(bro_mask.sum())
+    bro_n = int(bro_mask.sum())
     coord_n = len(result) - bro_n
     logger.info(
         "Soil enrichment: %d BRO (%.1f%%), %d coord_rule (%.1f%%)",
-        bro_n, bro_n / len(result) * 100,
-        coord_n, coord_n / len(result) * 100,
+        bro_n,
+        bro_n / len(result) * 100,
+        coord_n,
+        coord_n / len(result) * 100,
     )
     logger.info("Soil distribution:\n%s", result["soil_type"].value_counts().to_string())
     return result
