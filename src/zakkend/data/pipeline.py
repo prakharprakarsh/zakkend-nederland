@@ -188,13 +188,12 @@ def _harmonize_to_schema(df: pd.DataFrame) -> pd.DataFrame:
 def build_real_dataset(
     municipality: str,
     max_buildings: int = 5000,
-    use_soil_api: bool = False,
 ) -> pd.DataFrame:
     """Build a real-data feature matrix for one municipality.
 
     Pipeline steps:
     1. Fetch real buildings from PDOK BAG (WFS)
-    2. Enrich with soil type (PDOK BRO + coordinate fallback)
+    2. Enrich with soil type (BRO cache + coordinate fallback)
     3. Enrich with InSAR deformation rates (calibrated estimator)
     4. Enrich with drought exposure (KNMI patterns)
     5. Estimate groundwater from soil + location
@@ -216,7 +215,7 @@ def build_real_dataset(
 
     # Step 2: Soil enrichment
     logger.info("Step 2/7: Enriching with soil data...")
-    df = enrich_with_soil(df, use_api=use_soil_api)
+    df = enrich_with_soil(df)
 
     # Step 3: InSAR deformation
     logger.info("Step 3/7: Enriching with InSAR deformation rates...")
@@ -300,7 +299,6 @@ def main() -> None:
         type=Path,
         default=config.PROCESSED_DATA_DIR / "real_data.parquet",
     )
-    parser.add_argument("--use-soil-api", action="store_true", help="Use PDOK BRO for soil")
     args = parser.parse_args()
 
     df = build_multi_municipality(

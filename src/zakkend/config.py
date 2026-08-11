@@ -82,5 +82,9 @@ TARGET_MUNICIPALITIES: dict[str, dict] = {
 
 # ──────────────────── PDOK API endpoints ───────────────────────────
 PDOK_BAG_WFS: str = "https://service.pdok.nl/lv/bag/wfs/v2_0"
-PDOK_BRO_SOIL_WFS: str = "https://service.pdok.nl/bzk/bro-bodemkaart/wfs/v1_0"
+# BRO Bodemkaart has no WFS — distributed as bulk GeoPackage via Atom feed only.
+# Atom: https://service.pdok.nl/tno/bro-bodemkaart/atom/bro-bodemkaart.xml
+# GeoPackage: BRO_DownloadBodemkaart.gpkg (~146 MB, EPSG:28992)
+# Pre-joined against buildings and cached in data/raw/bro_soil_cache.parquet.
+PDOK_BRO_SOIL_ATOM: str = "https://service.pdok.nl/tno/bro-bodemkaart/atom/bro-bodemkaart.xml"
 KNMI_OPEN_DATA_BASE: str = "https://www.daggegevens.knmi.nl/klimatologie/daggegevens"

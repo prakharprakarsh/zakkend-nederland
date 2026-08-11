@@ -56,7 +56,10 @@ htmlcov/
 data/raw/*
 data/processed/*
 !data/raw/.gitkeep
+!data/raw/bro_soil_cache.parquet
 !data/processed/.gitkeep
+# BRO GeoPackage is 146 MB — download once via scripts/build_bro_cache.py
+data/raw/BRO_DownloadBodemkaart.gpkg
 models/*.pkl
 models/*.joblib
 models/*.ubj

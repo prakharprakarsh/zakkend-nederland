@@ -1,20 +1,45 @@
-"""Soil type estimation from PDOK BRO + coordinate-based fallback.
+"""Soil type classification from BRO Bodemkaart + coordinate-based fallback.
 
-The primary source is the BRO Bodemkaart (soil map) via PDOK WFS.
-When the API is unavailable or for speed, a coordinate-based estimator
-uses known Dutch geological boundaries to approximate soil type.
+Primary source
+--------------
+The BRO Bodemkaart (SGM, 1:50 000) is published by PDOK as a bulk download only — no
+WFS endpoint exists. It is available from the PDOK Atom feed:
+  https://service.pdok.nl/tno/bro-bodemkaart/atom/bro-bodemkaart.xml
+  GeoPackage: BRO_DownloadBodemkaart.gpkg  (~146 MB, EPSG:28992)
 
-Geological basis for the fallback:
-    - Western NL (roughly lon < 5.0): peat/clay dominant (Holocene deposits)
+The GeoPackage is downloaded once into data/raw/ (gitignored) and the result of a
+point-in-polygon spatial join against all processed buildings is cached in
+data/raw/bro_soil_cache.parquet (committed, 20 KB). Tests and CI use the cache; the
+GeoPackage is only needed to regenerate the cache or extend it to new buildings.
+
+Coverage
+--------
+The BRO Bodemkaart at 1:50 000 does not map urban hardscape, water bodies, or
+infrastructure zones. Of 3,828 buildings in real_data.parquet, 1,031 (26.9%) received a
+BRO soil label; the remaining 2,797 (73.1%) fall back to the coordinate rule. The cache
+parquet contains 1,128 unique coordinate entries — 97 more than matched in the pipeline
+because coordinate rounding differs slightly between the GeoPackage centroid coordinates
+and the BAG WFS geometry centroids. Both the soil type and the lookup source ('BRO' or
+'coord_rule') are recorded per building in the soil_source column.
+
+Per-municipality BRO match rate (real_data.parquet):
+    Dordrecht  483 / 974  (49.6%)
+    Zaanstad   383 / 975  (39.3%)
+    Rotterdam   91 / 932  ( 9.8%)
+    Gouda       74 / 947  ( 7.8%)
+
+Coordinate fallback
+-------------------
+    - Western NL (lon < 5.0): peat/clay dominant (Holocene deposits)
     - River area (Betuwe, ~51.8–52.0 lat, 5.0–6.0 lon): river clay
     - Eastern NL (lon > 5.5): sand dominant (Pleistocene)
     - Southern Limburg: loess
-    - Peat is concentrated in the Groene Hart, Friesland, NW-Overijssel
+    - Peat concentrated in Groene Hart, Friesland, NW-Overijssel
 
 Usage
 -----
     from zakkend.data.soil import enrich_with_soil
-    df = enrich_with_soil(buildings_df)  # adds soil_type, peat_thickness_m columns
+    df = enrich_with_soil(buildings_df)  # adds soil_type, peat_thickness_m, soil_source
 """
 
 from __future__ import annotations
@@ -23,21 +48,82 @@ import logging
 
 import numpy as np
 import pandas as pd
-import requests
 
 from zakkend import config
 
 logger = logging.getLogger(__name__)
 
-_SOIL_WFS_TIMEOUT = 20
+# Mapping from BRO GeoPackage mainsoilclassification (Dutch) to our five categories.
+# Built from the soilarea → soilarea_soilunit → soil_units join in the GeoPackage.
+_MAINSOIL_TO_SIMPLE: dict[str, str] = {
+    "Veengronden": "peat",
+    "Moerige gronden": "peat",
+    "Zeekleigronden": "clay",
+    "Rivierkleigronden": "clay",
+    "Niet-gerijpte minerale gronden": "clay",
+    "Oude rivierkleigronden": "clay",
+    "Zeer oude mariene afzettingen": "clay",
+    "Kalkloze zandgronden": "sand",
+    "Kalkhoudende zandgronden": "sand",
+    "Podzolgronden": "sand",
+    "Dikke eerdgronden": "sand",
+    "Leemgronden": "loess",
+    "Brikgronden": "loess",
+    "Kalksteen verweringsgronden": "loess",
+    "Keileemgronden": "sandy_clay",
+    "Zeer oude fluviatiele afzettingen": "sandy_clay",
+    "Gedefinieerde associaties": "sandy_clay",
+}
+
+# Lazy singleton — loaded once on first call to lookup_bro_soil().
+_BRO_CACHE: dict[tuple[float, float], str] | None = None
+
+
+def _load_bro_cache() -> dict[tuple[float, float], str]:
+    """Load bro_soil_cache.parquet into memory (lazy, cached after first call)."""
+    global _BRO_CACHE
+    if _BRO_CACHE is not None:
+        return _BRO_CACHE
+
+    cache_path = config.RAW_DATA_DIR / "bro_soil_cache.parquet"
+    if not cache_path.exists():
+        logger.warning(
+            "BRO soil cache not found at %s — all buildings will use the coordinate rule. "
+            "Run scripts/build_bro_cache.py to regenerate it from the GeoPackage.",
+            cache_path,
+        )
+        _BRO_CACHE = {}
+        return _BRO_CACHE
+
+    df = pd.read_parquet(cache_path)
+    _BRO_CACHE = {
+        (float(row.lat5), float(row.lon5)): str(row.bro_soil_type)
+        for row in df.itertuples(index=False)
+    }
+    logger.info("Loaded BRO soil cache: %d entries from %s", len(_BRO_CACHE), cache_path)
+    return _BRO_CACHE
+
+
+def lookup_bro_soil(lat: float, lon: float) -> str | None:
+    """Return the BRO Bodemkaart soil type for a coordinate, or None on cache miss.
+
+    A miss means the building centroid fell in an area the 1:50 000 soil map does
+    not cover (urban hardscape, water, infrastructure). The caller should fall back
+    to _classify_soil_by_coordinates in that case.
+    """
+    cache = _load_bro_cache()
+    return cache.get((round(lat, 5), round(lon, 5)))
 
 
 def _classify_soil_by_coordinates(lat: float, lon: float) -> str:
     """Rule-based soil classification from Dutch geological knowledge.
 
-    This is a coarse approximation used when BRO WFS is unavailable.
-    It correctly captures the macro patterns (west=peat/clay,
-    east=sand, south=loess) that drive subsidence risk.
+    Used as a fallback when the BRO cache has no entry for a point. Captures the
+    macro patterns (west=peat/clay, east=sand, south=loess) that drive subsidence
+    risk, but misclassifies cities whose centroids fall between rule boundaries
+    (notably Dordrecht, which misses both the river-clay and peat-belt rules by
+    0.08 deg longitude and 0.07 deg latitude respectively and falls through to the
+    catch-all sandy_clay).
     """
     # Southern Limburg: loess
     if lat < 51.0 and lon > 5.7:
@@ -71,79 +157,23 @@ def _classify_soil_by_coordinates(lat: float, lon: float) -> str:
     if lon > 5.5:
         return "sand"
 
-    # Default for transition zones
+    # Catch-all — western transition zone not covered above
     return "sandy_clay"
 
 
-def _estimate_peat_thickness(soil_type: str, lat: float, lon: float) -> float:
-    """Estimate peat layer thickness in meters.
-
-    Based on TNO DINOloket typical values:
-    - Groene Hart: 2–8m peat layers
-    - Friesland: 1–4m
-    - River areas: thin or absent
-    """
-    if soil_type != "peat":
-        return 0.0
-
-    rng = np.random.default_rng(int(abs(lat * 1000) + abs(lon * 1000)))
-
-    # Groene Hart has thicker peat
-    if 51.9 <= lat <= 52.3 and 4.4 <= lon <= 5.0:
-        return float(np.clip(rng.gamma(3.0, 1.5), 1.0, 10.0))
-    else:
-        return float(np.clip(rng.gamma(2.0, 1.0), 0.5, 6.0))
-
-
-def try_pdok_bro_soil(lat: float, lon: float) -> str | None:
-    """Attempt a point query on the PDOK BRO Bodemkaart WFS.
-
-    Returns the simplified soil class or None if the API is unreachable.
-    """
-    # Buffer around point for the spatial query (approx 50m in degrees)
-    buf = 0.0005
-    bbox = f"{lat - buf},{lon - buf},{lat + buf},{lon + buf},EPSG:4326"
-
-    params = {
-        "service": "WFS",
-        "version": "2.0.0",
-        "request": "GetFeature",
-        "typeName": "bodemkaart50000:bodemvlak",
-        "outputFormat": "application/json",
-        "srsName": "EPSG:4326",
-        "bbox": bbox,
-        "count": 1,
-    }
-
-    try:
-        resp = requests.get(config.PDOK_BRO_SOIL_WFS, params=params, timeout=_SOIL_WFS_TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json()
-        features = data.get("features", [])
-        if not features:
-            return None
-
-        # Parse BRO soil code to our simplified schema
-        props = features[0].get("properties", {})
-        bodem_code = str(props.get("bodemsubgroep", props.get("code", "")))
-        return _bro_code_to_simple(bodem_code)
-    except Exception as e:
-        logger.debug(f"BRO WFS query failed (using fallback): {e}")
-        return None
-
-
 def _bro_code_to_simple(code: str) -> str:
-    """Map BRO bodemsubgroep codes to our 5 soil classes.
+    """Map a BRO bodemsubgroep code to our five soil classes.
 
-    BRO codes follow the Dutch soil classification system:
-    - V* = veen (peat)
-    - M*, K*, R* = klei (clay) variants
-    - Z*, H*, Y* = zand (sand) variants
-    - L* = leem/loess
+    Used when processing the GeoPackage directly (e.g. to rebuild the cache).
+    The GeoPackage mainsoilclassification field is preferred; this function handles
+    raw soilunit_code values for edge cases.
+
+    BRO code conventions (Dutch soil classification system):
+      V* = veen (peat) | M*, K*, R* = klei (clay) | Z*, H*, Y* = zand (sand) | L* = loess
     """
     code_upper = code.upper().strip()
     if not code_upper:
-        return "sandy_clay"  # safe default
+        return "sandy_clay"
 
     first = code_upper[0]
     if first == "V" or "VEEN" in code_upper:
@@ -158,65 +188,89 @@ def _bro_code_to_simple(code: str) -> str:
         return "sandy_clay"
 
 
-def enrich_with_soil(
-    df: pd.DataFrame,
-    use_api: bool = True,
-    api_sample_rate: float = 0.05,
-) -> pd.DataFrame:
-    """Add soil_type and peat_thickness_m columns to a buildings DataFrame.
+def _estimate_peat_thickness(soil_type: str, lat: float, lon: float) -> float:
+    """Estimate peat layer thickness in metres (TNO DINOloket typical values).
+
+    Groene Hart: 2–8 m | Friesland: 1–4 m | River/other areas: absent (0.0).
+    """
+    if soil_type != "peat":
+        return 0.0
+
+    rng = np.random.default_rng(int(abs(lat * 1000) + abs(lon * 1000)))
+
+    if 51.9 <= lat <= 52.3 and 4.4 <= lon <= 5.0:  # Groene Hart — thicker peat
+        return float(np.clip(rng.gamma(3.0, 1.5), 1.0, 10.0))
+    else:
+        return float(np.clip(rng.gamma(2.0, 1.0), 0.5, 6.0))
+
+
+def enrich_with_soil(df: pd.DataFrame) -> pd.DataFrame:
+    """Add soil_type, peat_thickness_m, and soil_source columns to a buildings DataFrame.
+
+    For each building the BRO cache is checked first (lookup_bro_soil). On a cache
+    miss — which occurs when the centroid lies in an area the 1:50 000 soil map does
+    not cover — the coordinate-based rule is used. The soil_source column records
+    which path was taken ('BRO' or 'coord_rule') so the fallback rate is auditable.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Must contain 'lat' and 'lon' columns.
-    use_api : bool
-        Whether to attempt PDOK BRO queries (slower, more accurate).
-    api_sample_rate : float
-        Fraction of buildings to query via BRO API (others use coordinate
-        fallback). Set to 1.0 for maximum accuracy, 0.0 for speed.
+        Must contain 'lat' and 'lon' columns (WGS84 decimal degrees).
 
     Returns
     -------
     pd.DataFrame
-        Input df with 'soil_type' and 'peat_thickness_m' columns added.
+        Input df with 'soil_type', 'peat_thickness_m', and 'soil_source' added.
     """
     result = df.copy()
-    n = len(result)
-    soil_types = []
-    peat_thicknesses = []
+    lat = result["lat"].values
+    lon = result["lon"].values
 
-    # Determine which rows get API lookups
-    rng = np.random.default_rng(config.RANDOM_STATE)
-    api_mask = rng.random(n) < api_sample_rate if use_api else np.zeros(n, dtype=bool)
-
-    api_hits = 0
-    api_misses = 0
-
-    for i, row in result.iterrows():
-        lat, lon = row["lat"], row["lon"]
-        soil = None
-
-        if api_mask[i if isinstance(i, int) else 0]:
-            soil = try_pdok_bro_soil(lat, lon)
-            if soil:
-                api_hits += 1
-            else:
-                api_misses += 1
-
-        if soil is None:
-            soil = _classify_soil_by_coordinates(lat, lon)
-
-        soil_types.append(soil)
-        peat_thicknesses.append(_estimate_peat_thickness(soil, lat, lon))
-
-    result["soil_type"] = soil_types
-    result["peat_thickness_m"] = [round(p, 2) for p in peat_thicknesses]
-
-    logger.info(
-        f"Soil enrichment complete: {n} buildings, "
-        f"{api_hits} API hits, {api_misses} API misses, "
-        f"{n - api_hits - api_misses} coordinate-based"
+    # ── BRO cache lookup (vectorised over keys) ───────────────────────────────
+    cache = _load_bro_cache()
+    bro_values = np.array(
+        [
+            cache.get((round(float(la), 5), round(float(lo), 5)))
+            for la, lo in zip(lat, lon, strict=True)
+        ],
+        dtype=object,
     )
-    logger.info(f"Soil distribution:\n{result['soil_type'].value_counts().to_string()}")
+    bro_mask = bro_values != None  # noqa: E711  (object array, not using 'is not None')
 
+    # ── Coordinate rule fallback (vectorised via np.select) ───────────────────
+    conditions = [
+        (lat < 51.0) & (lon > 5.7),
+        lon < 4.4,
+        (lat >= 51.9) & (lat <= 52.5) & (lon >= 4.4) & (lon <= 5.2),
+        (lat >= 52.6) & (lat <= 53.2) & (lon >= 5.3) & (lon <= 6.2),
+        (lat >= 52.4) & (lat <= 52.55) & (lon >= 4.7) & (lon <= 4.9),
+        (lat >= 51.75) & (lat <= 52.05) & (lon >= 4.8) & (lon <= 6.0),
+        lon < 5.0,
+        lon > 5.5,
+    ]
+    choices = ["loess", "clay", "peat", "peat", "peat", "clay", "sandy_clay", "sand"]
+    coord_values = np.select(conditions, choices, default="sandy_clay")
+
+    # ── Merge: BRO where available, coord_rule otherwise ─────────────────────
+    final_soil = np.where(bro_mask, bro_values, coord_values).astype(str)
+    result["soil_type"] = final_soil
+    result["soil_source"] = np.where(bro_mask, "BRO", "coord_rule")
+
+    # peat_thickness_m is 0.0 for non-peat; only compute for peat rows
+    peat_mask = final_soil == "peat"
+    thicknesses = np.zeros(len(result))
+    for i in np.where(peat_mask)[0]:
+        thicknesses[i] = _estimate_peat_thickness("peat", float(lat[i]), float(lon[i]))
+    result["peat_thickness_m"] = np.round(thicknesses, 2)
+
+    bro_n = int(bro_mask.sum())
+    coord_n = len(result) - bro_n
+    logger.info(
+        "Soil enrichment: %d BRO (%.1f%%), %d coord_rule (%.1f%%)",
+        bro_n,
+        bro_n / len(result) * 100,
+        coord_n,
+        coord_n / len(result) * 100,
+    )
+    logger.info("Soil distribution:\n%s", result["soil_type"].value_counts().to_string())
     return result
