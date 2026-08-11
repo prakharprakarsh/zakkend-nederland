@@ -36,8 +36,8 @@ architecture, and domain experts interested in geospatial risk modelling for Dut
 - Replace inspection by a qualified structural engineer (*funderingsadviseur*)
 
 The labels are synthetic, 8 of 11 features are fully simulated (`soil_type` is hybrid:
-29.5% BRO Bodemkaart, 70.5% coordinate rule), and the model has never been validated
-against any real-world ground truth.
+26.9% BRO Bodemkaart — 1,031 of 3,828 buildings; 73.1% coordinate rule), and the model
+has never been validated against any real-world ground truth.
 
 ---
 
@@ -137,7 +137,7 @@ frozen vocabulary captured at training time (`TrainedModel.category_levels`).
 | `year_built` | ✅ PDOK BAG `bouwjaar` in Phase 2 pipeline; synthetic in training |
 | `building_age` | ↳ Arithmetic derivative of `year_built` (`2026 − year_built`) |
 | `foundation_type` | ❌ `rng.choice` weighted by construction era and soil type |
-| `soil_type` | ⚠️ Hybrid: BRO Bodemkaart GeoPackage spatial join (29.5% of buildings, CC0) + coordinate-based rule fallback (70.5%; urban hardscape not mapped at 1:50 000) |
+| `soil_type` | ⚠️ Hybrid: BRO Bodemkaart GeoPackage spatial join (1,031 of 3,828 buildings = 26.9%, CC0) + coordinate-based rule fallback (73.1%; urban hardscape not mapped at 1:50 000) |
 | `peat_thickness_m` | ❌ `rng` seeded by coordinates, TNO priors |
 | `groundwater_depth_m` | ❌ `rng.normal` by soil type |
 | `groundwater_variability` | ❌ `rng.beta` by soil type |
