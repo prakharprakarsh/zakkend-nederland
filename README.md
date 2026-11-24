@@ -81,9 +81,10 @@ Class weights lifted `low` F1 from 0.603 to 0.680 without hurting the other clas
 | | Accuracy | Macro F1 |
 |---|---|---|
 | Coordinate-rule soil only | 0.092 | 0.142 |
-| With BRO Bodemkaart join | **0.614** | **0.480** |
+| With BRO Bodemkaart join | **0.763** | **0.563** |
+| Always predict `moderate` (reference) | 0.677 | — |
 
-The two rows aren't on identical labels (changing soil changes the rule-engine labels), and a constant `moderate` predictor scores 0.657 on Dordrecht — so this is not a generalisation claim. Breakdown in [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md).
+The model beats the constant-`moderate` reference by about 9 points, but `low` and `high` recall are only around a third, and the before/after rows aren't on identical labels (changing soil changes the rule-engine labels). So this is a partial out-of-distribution check, not a generalisation claim. Breakdown in [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md).
 
 ## What I learned debugging the held-out city
 
@@ -93,7 +94,11 @@ The first grouped-split run collapsed to 9% accuracy — far below random. Traci
 2. `sandy_clay` never appeared in training (all three training cities were peat), so XGBoost routed all 974 test rows down the missing-value branch.
 3. Because the label engine depends on soil, Dordrecht's label distribution was also inverted relative to training.
 
-One bug, two symptoms. Replacing the dead BRO WFS endpoint with a local spatial join against the bulk GeoPackage fixed the soil for ~half of Dordrecht and moved accuracy to 0.614. The lesson: with geodata, check the feature distributions per group before trusting any split.
+One bug, two symptoms. Replacing the dead BRO WFS endpoint with a local spatial join against the bulk GeoPackage fixed the soil for ~half of Dordrecht.
+
+Then a second surprise: re-running the same split months later gave 0.771 instead of 0.614. Three simulated features are drawn from a seeded RNG in row order, and the BAG fetch never sorted its results, so the dataset depended on the order PDOK happened to return buildings in. Sorting by BAG id fixed it (0.763, reproducible, with a regression test).
+
+Lessons: with geodata, check feature distributions per group before trusting a split, and make sure "seeded" really means "reproducible".
 
 ## Engineering notes
 
