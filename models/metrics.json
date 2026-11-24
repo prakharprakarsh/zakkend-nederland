@@ -69,71 +69,71 @@
     }
   },
   "grouped_split": {
-    "accuracy": 0.6139630390143738,
-    "macro_f1": 0.4798465259808371,
-    "weighted_f1": 0.6274248198528175,
+    "accuracy": 0.7628336755646817,
+    "macro_f1": 0.5627584610884179,
+    "weighted_f1": 0.7351685164522422,
     "per_class": {
       "low": {
-        "precision": 0.07650273224043716,
-        "recall": 0.13592233009708737,
-        "f1": 0.0979020979020979,
-        "support": 103
+        "precision": 0.5952380952380952,
+        "recall": 0.29411764705882354,
+        "f1": 0.3937007874015748,
+        "support": 85
       },
       "moderate": {
-        "precision": 0.7450980392156863,
-        "recall": 0.771875,
-        "f1": 0.758250191864927,
-        "support": 640
+        "precision": 0.8051282051282052,
+        "recall": 0.952959028831563,
+        "f1": 0.8728283530229326,
+        "support": 659
       },
       "high": {
-        "precision": 0.6666666666666666,
-        "recall": 0.3657142857142857,
-        "f1": 0.47232472324723246,
-        "support": 175
+        "precision": 0.62,
+        "recall": 0.34831460674157305,
+        "f1": 0.4460431654676259,
+        "support": 178
       },
       "critical": {
-        "precision": 0.8125,
-        "recall": 0.4642857142857143,
-        "f1": 0.5909090909090909,
-        "support": 56
+        "precision": 0.5384615384615384,
+        "recall": 0.5384615384615384,
+        "f1": 0.5384615384615384,
+        "support": 52
       }
     },
     "confusion_matrix": [
       [
-        14,
-        89,
+        25,
+        60,
         0,
         0
       ],
       [
-        139,
-        494,
-        7,
+        15,
+        628,
+        16,
         0
       ],
       [
-        28,
-        77,
-        64,
-        6
+        2,
+        90,
+        62,
+        24
       ],
       [
+        0,
         2,
-        3,
-        25,
-        26
+        22,
+        28
       ]
     ],
     "n_train": 2283,
     "n_val": 571,
     "n_test": 974,
-    "best_iteration": 111,
+    "best_iteration": 83,
     "sample_weighted": true,
     "baselines": {
-      "most_frequent": 0.0575,
-      "prior": 0.0575,
-      "stratified": 0.1396,
-      "uniform": 0.2361,
+      "most_frequent": 0.0534,
+      "prior": 0.0534,
+      "stratified": 0.1622,
+      "uniform": 0.2444,
       "uniform_4class": 0.25
     },
     "municipality_split": {
