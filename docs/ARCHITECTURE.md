@@ -32,10 +32,10 @@ SHAP explanations human-readable.
 XGBoost `multi:softprob` over 4 ordinal risk classes. Chosen because:
 
 - Handles mixed numeric/categorical cleanly
-- Robust to missing values (when real InSAR and BRO soil data replace the current coordinate-based estimates, those sources are naturally sparse)
+- Handles missing values natively (when real InSAR and BRO soil data replace the current coordinate-based estimates, those sources are naturally sparse)
 - Tree-SHAP is exact and fast — critical for real-time explanation API
-- Widely deployed in Dutch banks' credit models, so explainability stories
-  translate directly to recruiter-relevant contexts
+- Widely used in Dutch banks' credit models, so the explainability tooling is familiar
+  to teams working on regulated risk models
 
 ### 4. Explainability (`src/zakkend/explain/`)
 
@@ -46,8 +46,7 @@ affecting property are explainable per-instance.
 ### 5. API (`src/zakkend/api/`)
 
 FastAPI for two reasons: Pydantic v2 gives us range-validated inputs for free,
-and automatic OpenAPI docs (`/docs`) make the system easy for recruiters to
-click through.
+and automatic OpenAPI docs (`/docs`) make the API easy to explore.
 
 ## Phase 2 integration points (shipped)
 

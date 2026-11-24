@@ -123,7 +123,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # ─── Load or generate data ───
+    # Load or generate data
     frames = []
 
     if args.data and args.data.exists():
@@ -158,13 +158,13 @@ def main() -> None:
 
     df = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
 
-    # ─── Ensure all required columns exist ───
+    # Ensure all required columns exist
     missing = set(config.FEATURE_COLUMNS) - set(df.columns)
     if missing:
         print(f"✗ Missing required columns: {sorted(missing)}")
         return
 
-    # ─── Train ───
+    # Train
     if args.split == "random":
         print(f"\n→ Training on {len(df):,} total rows (random 60/20/20 split)...")
 
@@ -187,7 +187,7 @@ def main() -> None:
             print(f"  {cls:10s}  {f1_nw:>15.3f}  {f1_w:>13.3f}  {sign}{delta:>6.3f}")
 
     else:
-        # ─── Grouped / municipality-based spatial holdout ───
+        # Grouped / municipality-based spatial holdout
         # Uses data/processed/real_data.parquet (real PDOK BAG buildings).
         real_path = config.PROCESSED_DATA_DIR / "real_data.parquet"
         if not real_path.exists():
@@ -248,14 +248,14 @@ def main() -> None:
             municipality_split={"train": train_munis, "test": [test_muni]},
         )
 
-    # ─── Save model ───
+    # Save model
     print(f"\n→ Saving model to {config.MODEL_PATH}")
     model.save()
 
-    # ─── Print metrics ───
+    # Print metrics
     _print_metrics(model, label=f"{args.split} split")
 
-    # ─── Data source breakdown ───
+    # Data source breakdown
     if "municipality" in df.columns:
         print("\nData sources:")
         for muni, count in df["municipality"].value_counts().items():
@@ -264,7 +264,7 @@ def main() -> None:
         if synth_count > 0:
             print(f"  Synthetic: {synth_count:,} rows")
 
-    # ─── Write metrics.json (incremental merge) ───
+    # Write metrics.json (incremental merge)
     metrics_path = config.MODELS_DIR / "metrics.json"
     all_metrics: dict = {}
     if metrics_path.exists():

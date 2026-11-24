@@ -9,7 +9,7 @@
 | | |
 |---|---|
 | **Name** | Zakkend Nederland subsidence risk classifier |
-| **Version** | 0.1.0 (`hardening` branch) |
+| **Version** | 0.1.0 |
 | **Type** | XGBoost `multi:softprob` — 4-class ordinal classifier |
 | **Output** | Risk class (`low` / `moderate` / `high` / `critical`) + 4 raw class probabilities + SHAP explanations |
 | **Input** | 11 tabular features; see Training data section |
@@ -25,7 +25,7 @@
 subsidence risk scoring, including SHAP-based per-prediction explanations. The model
 illustrates what such a system would look like with real labels and real feature data.
 
-**Primary intended users.** Portfolio reviewers, ML engineers evaluating the pipeline
+**Primary intended users.** ML engineers evaluating the pipeline
 architecture, and domain experts interested in geospatial risk modelling for Dutch housing.
 
 **Out-of-scope uses.** This model must **not** be used to:

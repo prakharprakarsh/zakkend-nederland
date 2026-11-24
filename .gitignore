@@ -74,7 +74,7 @@ logs/
 # OS
 Thumbs.db
 
-# Local deploy_hf.py output — spaces/ is assembled at deploy time, not committed (see §1.8)
+# Local deploy_hf.py output — spaces/ is assembled at deploy time, not committed
 spaces/src/
 spaces/models/
 spaces/data/

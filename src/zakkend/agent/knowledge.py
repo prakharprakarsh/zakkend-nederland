@@ -40,7 +40,7 @@ class InspectionBody:
     service_type: str
 
 
-# ──────────────────── Remediation options ────────────────────
+# Remediation options
 
 REMEDIATION_OPTIONS: list[RemediationOption] = [
     RemediationOption(
@@ -105,7 +105,7 @@ REMEDIATION_OPTIONS: list[RemediationOption] = [
 ]
 
 
-# ──────────────────── Funding schemes ────────────────────
+# Funding schemes
 
 FUNDING_SCHEMES: list[FundingScheme] = [
     FundingScheme(
@@ -156,7 +156,7 @@ FUNDING_SCHEMES: list[FundingScheme] = [
 ]
 
 
-# ──────────────────── Inspection bodies ────────────────────
+# Inspection bodies
 
 INSPECTION_BODIES: list[InspectionBody] = [
     InspectionBody(
@@ -186,7 +186,7 @@ INSPECTION_BODIES: list[InspectionBody] = [
 ]
 
 
-# ──────────────────── Lookup functions ────────────────────
+# Lookup functions
 
 
 def get_applicable_remediations(

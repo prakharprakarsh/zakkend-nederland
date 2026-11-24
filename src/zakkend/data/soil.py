@@ -226,7 +226,7 @@ def enrich_with_soil(df: pd.DataFrame) -> pd.DataFrame:
     lat = result["lat"].values
     lon = result["lon"].values
 
-    # ── BRO cache lookup (vectorised over keys) ───────────────────────────────
+    # BRO cache lookup (vectorised over keys)
     cache = _load_bro_cache()
     bro_values = np.array(
         [
@@ -237,7 +237,7 @@ def enrich_with_soil(df: pd.DataFrame) -> pd.DataFrame:
     )
     bro_mask = bro_values != None  # noqa: E711  (object array, not using 'is not None')
 
-    # ── Coordinate rule fallback (vectorised via np.select) ───────────────────
+    # Coordinate rule fallback (vectorised via np.select)
     conditions = [
         (lat < 51.0) & (lon > 5.7),
         lon < 4.4,
@@ -251,7 +251,7 @@ def enrich_with_soil(df: pd.DataFrame) -> pd.DataFrame:
     choices = ["loess", "clay", "peat", "peat", "peat", "clay", "sandy_clay", "sand"]
     coord_values = np.select(conditions, choices, default="sandy_clay")
 
-    # ── Merge: BRO where available, coord_rule otherwise ─────────────────────
+    # Merge: BRO where available, coord_rule otherwise
     final_soil = np.where(bro_mask, bro_values, coord_values).astype(str)
     result["soil_type"] = final_soil
     result["soil_source"] = np.where(bro_mask, "BRO", "coord_rule")

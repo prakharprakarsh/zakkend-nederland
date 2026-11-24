@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# ──────────────────────────── Paths ────────────────────────────
+# Paths
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
 DATA_DIR: Path = PROJECT_ROOT / "data"
 RAW_DATA_DIR: Path = DATA_DIR / "raw"
@@ -16,27 +16,27 @@ for _dir in (DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR):
 
 MODEL_PATH: Path = MODELS_DIR / "subsidence_xgb.ubj"
 
-# ──────────────────── Netherlands geographic bounds ─────────────────
+# Netherlands geographic bounds
 NL_LAT_MIN: float = 50.75
 NL_LAT_MAX: float = 53.55
 NL_LON_MIN: float = 3.35
 NL_LON_MAX: float = 7.25
 
-# ──────────────────────── Soil categories ──────────────────────────
+# Soil categories
 SOIL_TYPES: tuple[str, ...] = ("peat", "clay", "sandy_clay", "sand", "loess")
 
 HIGH_PEAT_PROVINCE_LAT_RANGE: tuple[float, float] = (51.85, 53.25)
 HIGH_PEAT_PROVINCE_LON_RANGE: tuple[float, float] = (4.20, 5.60)
 
-# ─────────────────────── Foundation types ──────────────────────────
+# Foundation types
 FOUNDATION_TYPES: tuple[str, ...] = ("wooden_pile", "concrete_pile", "strip", "slab")
 WOODEN_PILE_ERA_END: int = 1970
 
-# ───────────────────── Risk-score thresholds ───────────────────────
+# Risk-score thresholds
 RISK_CLASSES: tuple[str, ...] = ("low", "moderate", "high", "critical")
 RISK_THRESHOLDS: tuple[float, ...] = (0.25, 0.50, 0.75)
 
-# ──────────────────────── Feature schema ───────────────────────────
+# Feature schema
 FEATURE_COLUMNS: list[str] = [
     "year_built",
     "building_age",
@@ -59,7 +59,7 @@ RANDOM_STATE: int = 42
 # Fixed rather than datetime.now().year so training is reproducible.
 REFERENCE_YEAR: int = 2026
 
-# ──────────────── Target municipalities for Phase 2 ────────────────
+# Target municipalities for Phase 2
 # These are known high-risk areas for subsidence.
 TARGET_MUNICIPALITIES: dict[str, dict] = {
     "Gouda": {
@@ -80,7 +80,7 @@ TARGET_MUNICIPALITIES: dict[str, dict] = {
     },
 }
 
-# ──────────────────── PDOK API endpoints ───────────────────────────
+# PDOK API endpoints
 PDOK_BAG_WFS: str = "https://service.pdok.nl/lv/bag/wfs/v2_0"
 # BRO Bodemkaart has no WFS — distributed as bulk GeoPackage via Atom feed only.
 # Atom: https://service.pdok.nl/tno/bro-bodemkaart/atom/bro-bodemkaart.xml

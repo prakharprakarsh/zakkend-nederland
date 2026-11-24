@@ -1,8 +1,7 @@
 # Known limitations
 
-This document is a gap analysis produced alongside the `hardening` branch audit
-(`docs/AUDIT.md`). Each limitation states what is currently true, why it matters,
-and what would be needed to close the gap.
+What the project currently does and doesn't do. Each entry covers the current state,
+why it matters, and what it would take to close the gap.
 
 ---
 
@@ -19,8 +18,7 @@ not three independent confounds.
 `_classify_soil_by_coordinates` in `data/soil.py` uses a sequence of geographic rules
 with a final catch-all `return "sandy_clay"`. Dordrecht's bbox falls through every rule:
 the river-clay rule requires `lon >= 4.8` (bbox lon_max is 4.72 — gap: **0.08 deg**,
-verified by running `_classify_soil_by_coordinates` on all corners and the centroid in
-this session); the peat-belt rule requires `lat >= 51.9` (bbox lat_max is 51.83 —
+verified by running `_classify_soil_by_coordinates` on all corners and the centroid); the peat-belt rule requires `lat >= 51.9` (bbox lat_max is 51.83 —
 gap: **0.07 deg**). Every point in the bbox hits the catch-all and is labelled `sandy_clay`.
 
 Dordrecht is in reality a peat-and-river-clay city in the Drechtsteden and one of the
@@ -79,7 +77,7 @@ distribution. The model memorises the rule correctly when the feature distributi
 identical. The held-out-city result shows the limit of that rule-recovery when even one
 feature's distribution (soil type) changes across cities.
 
-**Summary of results** (both produced by commands run on the `hardening` branch):
+**Summary of results** (`scripts/train.py`, `RANDOM_STATE=42`):
 
 | | Command | Accuracy | Macro F1 | Notes |
 |---|---|---|---|---|

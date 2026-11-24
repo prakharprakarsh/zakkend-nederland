@@ -21,7 +21,7 @@ from zakkend.agent.knowledge import (
     get_inspection_bodies,
 )
 
-# ──────────────── Knowledge base tests ────────────────
+# Knowledge base tests
 
 
 class TestKnowledgeBase:
@@ -65,7 +65,7 @@ class TestKnowledgeBase:
             assert b.url.startswith("http"), f"{b.name} missing URL"
 
 
-# ──────────────── Agent graph tests ────────────────
+# Agent graph tests
 
 
 class TestAgentGraph:

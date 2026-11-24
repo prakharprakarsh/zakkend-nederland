@@ -126,7 +126,7 @@ def test_invalid_soil_type_returns_422(client):
 def test_building_age_field_rejected(client):
     """building_age is no longer a user input — the API returns 422 if it is sent.
 
-    Before §1.5 fix: year_built=2020 with building_age=300 returned 200 OK and
+    Regression: previously year_built=2020 with building_age=300 returned 200 OK and
     used the contradictory user-supplied age. After the fix: extra fields are
     forbidden (ConfigDict extra='forbid'), and building_age is derived server-side
     from year_built via config.REFERENCE_YEAR.

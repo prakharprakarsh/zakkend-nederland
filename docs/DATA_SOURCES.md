@@ -1,6 +1,26 @@
 # Data sources
 
-All data sources used or planned are **open and Dutch-official**.
+All data sources used or planned are open Dutch government data.
+
+## Feature provenance
+
+What is measured vs. simulated in the current model:
+
+| Feature | Source |
+|---------|--------|
+| `year_built` | Measured — PDOK BAG `bouwjaar` |
+| `building_age` | Derived — `REFERENCE_YEAR − year_built` |
+| `soil_type` | Hybrid — BRO Bodemkaart spatial join for 1,031 of 3,828 buildings (26.9%); coordinate rule for the rest (urban areas aren't covered by the 1:50,000 map) |
+| `peat_thickness_m` | Simulated — seeded by coordinates, TNO thickness ranges as priors |
+| `groundwater_depth_m` | Simulated — per-soil-type normal distributions |
+| `groundwater_variability` | Simulated — per-soil-type beta distributions |
+| `insar_deformation_mm_yr` | Simulated — seeded by coordinates, means from BodemDalingsKaart regional rates |
+| `drought_exposure_index` | Simulated — latitude gradient from KNMI maps |
+| `distance_to_water_m` | Simulated — exponential draw, east/west split |
+| `neighborhood_damage_rate` | Simulated — beta draw per spatial hash bucket |
+| `foundation_type` | Simulated — weighted by construction era and soil type |
+
+Building centroids (lat/lon) are measured from BAG and drive the coordinate-based estimators, but are not model features themselves.
 
 ## Phase 2: Buildings & addresses
 

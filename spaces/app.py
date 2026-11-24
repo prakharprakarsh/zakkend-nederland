@@ -1,6 +1,6 @@
 """Zakkend Nederland — Hugging Face Spaces Streamlit App.
 
-This is the recruiter-facing demo. It runs the full pipeline:
+Streamlit demo. Runs the full pipeline:
     building features → XGBoost risk model → SHAP explanation
     → LangGraph remediation agent → downloadable PDF report
 
@@ -19,7 +19,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-# ──────────── Ensure the package is importable ────────────
+# Ensure the package is importable
 # When running in HF Spaces, the package is in the same directory
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
@@ -30,7 +30,7 @@ if str(ROOT / "src") not in sys.path:
 from zakkend import config  # noqa: E402 — must follow sys.path setup
 
 
-# ──────────── Page config ────────────
+# Page config
 st.set_page_config(
     page_title="Zakkend Nederland — Foundation Risk",
     page_icon="🏚️",
@@ -38,7 +38,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ──────────── Custom CSS ────────────
+# Custom CSS
 st.markdown("""
 <style>
     .risk-critical { color: #e74c3c; font-size: 3rem; font-weight: 800; }
@@ -55,7 +55,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ──────────── Sidebar: Building input form ────────────
+# Sidebar: Building input form
 with st.sidebar:
     st.markdown("## 🏚️ Zakkend Nederland")
     st.caption("Foundation subsidence risk for Dutch homes")
@@ -91,7 +91,7 @@ with st.sidebar:
 
     assess_button = st.button("🔎 Assess Risk", use_container_width=True, type="primary")
 
-# ──────────── Build features dict ────────────
+# Build features dict
 # building_age is derived here so that both the model DataFrame and the agent
 # invocation receive a complete feature set (agent bypasses api/main.py).
 features = {
@@ -109,7 +109,7 @@ features = {
 }
 
 
-# ──────────── Main content ────────────
+# Main content
 if not assess_button:
     # Landing page
     st.markdown("# 🏚️ Zakkend Nederland")
@@ -153,7 +153,7 @@ if not assess_button:
     )
 
 else:
-    # ──────────── Run assessment ────────────
+    # Run assessment
     with st.spinner("Running risk assessment..."):
         try:
             from zakkend.models.baseline import TrainedModel
@@ -184,7 +184,7 @@ else:
             st.code(traceback.format_exc(), language="python")
             st.stop()
 
-    # ──────────── Display results ────────────
+    # Display results
     st.markdown("# 🏚️ Assessment Results")
     st.markdown("---")
 

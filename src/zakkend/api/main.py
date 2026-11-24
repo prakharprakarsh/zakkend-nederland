@@ -17,7 +17,7 @@ from zakkend.explain.shap_explainer import SubsidenceExplainer
 from zakkend.features.engineering import UnknownCategoryError
 from zakkend.models.baseline import TrainedModel
 
-# ───────────────────────────── Models in memory ─────────────────────────
+# Models in memory
 _model: TrainedModel | None = None
 _explainer: SubsidenceExplainer | None = None
 
@@ -51,7 +51,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-# ─────────────────────────────── Schemas ────────────────────────────────
+# Schemas
 
 # Literal types matching config.FOUNDATION_TYPES and config.SOIL_TYPES.
 # FastAPI surfaces these as string enums in the OpenAPI schema.
@@ -104,7 +104,7 @@ class ExplanationResponse(PredictionResponse):
     top_drivers: list[ContributionOut]
 
 
-# ──────────────────────────────── Routes ────────────────────────────────
+# Routes
 @app.get("/", include_in_schema=False)
 def root():
     return FileResponse(STATIC_DIR / "index.html")

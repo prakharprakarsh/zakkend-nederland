@@ -18,7 +18,7 @@ from zakkend.data.insar import _estimate_insar_deformation
 from zakkend.data.soil import _bro_code_to_simple, _classify_soil_by_coordinates
 from zakkend.data.weather import _estimate_drought_exposure
 
-# ──────────────────── BAG parser tests ────────────────────
+# BAG parser tests
 
 
 class TestBAGParser:
@@ -79,7 +79,7 @@ class TestBAGParser:
         assert len(df) == 1
 
 
-# ──────────────────── Soil classification tests ────────────────────
+# Soil classification tests
 
 
 class TestSoilClassification:
@@ -116,7 +116,7 @@ class TestSoilClassification:
         assert _bro_code_to_simple("Ld5") == "loess"
 
 
-# ──────────────────── InSAR estimation tests ────────────────────
+# InSAR estimation tests
 
 
 class TestInSAR:
@@ -141,7 +141,7 @@ class TestInSAR:
         assert np.mean(peat_vals) > np.mean(sand_vals)
 
 
-# ──────────────────── Drought estimation tests ────────────────────
+# Drought estimation tests
 
 
 class TestDrought:
@@ -160,7 +160,7 @@ class TestDrought:
         assert 0.0 <= val <= 1.0
 
 
-# ──────────────────── Pipeline schema test ────────────────────
+# Pipeline schema test
 
 
 class TestPipelineSchema:

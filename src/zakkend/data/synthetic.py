@@ -150,12 +150,12 @@ def generate(
     """
     rng = np.random.default_rng(seed)
 
-    # --- Location ---
+    # Location
     lat = rng.uniform(config.NL_LAT_MIN, config.NL_LAT_MAX, n)
     lon = rng.uniform(config.NL_LON_MIN, config.NL_LON_MAX, n)
     in_peat = _in_peat_zone(lat, lon)
 
-    # --- Building attributes ---
+    # Building attributes
     # Bimodal year: 1890s–1940s spike + post-war boom + new-builds.
     era_choice = rng.choice(3, size=n, p=[0.35, 0.45, 0.20])
     year_built = np.where(
@@ -170,7 +170,7 @@ def generate(
     soil = _sample_soil(rng, in_peat)
     foundation = _sample_foundation(rng, year_built, soil)
 
-    # --- Soil / hydrology ---
+    # Soil / hydrology
     peat_thickness = np.where(
         soil == "peat",
         rng.gamma(2.0, 1.2, size=n),  # heavy tail
@@ -183,7 +183,7 @@ def generate(
     ).clip(0.1, 5.0)
     groundwater_variability = rng.beta(2, 5, size=n)  # skewed low
 
-    # --- Remote sensing / climate ---
+    # Remote sensing / climate
     # InSAR: subsidence (positive mm/yr) correlated with peat + shallow water
     base_insar = (
         0.5
@@ -199,7 +199,7 @@ def generate(
         0.3 + 0.2 * (lat < 52.3) + rng.beta(2, 4, n) * 0.5  # south slightly more drought-exposed
     ).clip(0, 1)
 
-    # --- Spatial features ---
+    # Spatial features
     distance_to_water = rng.exponential(500, n).clip(5, 5000)
 
     # Neighborhood damage rate: spatial autocorrelation via lat/lon hashing

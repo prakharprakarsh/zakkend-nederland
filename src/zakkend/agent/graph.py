@@ -9,11 +9,9 @@ The agent works in two modes:
     2. **LLM mode**: Uses an LLM to produce more natural language reports.
        Activated by setting ANTHROPIC_API_KEY or OPENAI_API_KEY env var.
 
-This demonstrates a production-ready LangGraph architecture where:
-    - State is typed and validated (TypedDict)
-    - Each node has a single responsibility
-    - The graph has a conditional edge (quality gate)
-    - Knowledge retrieval is separated from generation
+Design notes: state is a TypedDict, each node does one thing, knowledge
+lookup is kept separate from generation, and a conditional edge sends
+reports that fail the quality check back for a redraft.
 
 Usage
 -----
@@ -42,7 +40,7 @@ from zakkend.agent.knowledge import (
 logger = logging.getLogger(__name__)
 
 
-# ──────────────────────── State schema ─────────────────────────
+# State schema
 
 
 class AgentState(TypedDict, total=False):
@@ -72,7 +70,7 @@ class AgentState(TypedDict, total=False):
     iteration: int
 
 
-# ──────────────────────── Node: assess_risk ─────────────────────
+# Node: assess_risk
 
 
 def assess_risk(state: AgentState) -> AgentState:
@@ -120,7 +118,7 @@ def assess_risk(state: AgentState) -> AgentState:
     }
 
 
-# ──────────────────── Node: lookup_remediation ──────────────────
+# Node: lookup_remediation
 
 
 def lookup_remediation(state: AgentState) -> AgentState:
@@ -174,7 +172,7 @@ def lookup_remediation(state: AgentState) -> AgentState:
     }
 
 
-# ──────────────────── Node: draft_report ────────────────────────
+# Node: draft_report
 
 
 def _risk_emoji(risk_class: str) -> str:
@@ -416,7 +414,7 @@ Use markdown formatting. Be specific to Dutch context."""
         return _draft_report_template(state)
 
 
-# ──────────────────── Node: quality_check ───────────────────────
+# Node: quality_check
 
 REQUIRED_SECTIONS = [
     "RISK ASSESSMENT",
@@ -449,7 +447,7 @@ def quality_check(state: AgentState) -> AgentState:
     }
 
 
-# ──────────────────── Conditional edge ──────────────────────────
+# Conditional edge
 
 
 def should_redraft(state: AgentState) -> str:
@@ -462,7 +460,7 @@ def should_redraft(state: AgentState) -> str:
     return "redraft"
 
 
-# ──────────────────── Graph construction ────────────────────────
+# Graph construction
 
 
 def create_remediation_agent() -> StateGraph:
