@@ -248,9 +248,12 @@ def main() -> None:
             municipality_split={"train": train_munis, "test": [test_muni]},
         )
 
-    # Save model
-    print(f"\n→ Saving model to {config.MODEL_PATH}")
-    model.save()
+    # Only the random-split model is the one the API / Streamlit app serve.
+    # The grouped split is an evaluation run on real buildings only, so its
+    # category vocabulary is narrower (no 'sand'); keep it in a separate file.
+    out_path = config.MODEL_PATH if args.split == "random" else config.MODELS_DIR / "subsidence_xgb_grouped.ubj"
+    print(f"\n→ Saving model to {out_path}")
+    model.save(out_path)
 
     # Print metrics
     _print_metrics(model, label=f"{args.split} split")

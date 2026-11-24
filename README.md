@@ -101,7 +101,7 @@ One bug, two symptoms. Replacing the dead BRO WFS endpoint with a local spatial 
 - **Frozen categorical vocabulary:** unseen categories at inference raise instead of silently becoming NaN.
 - **API validation:** Pydantic `Literal` types for categoricals, `extra="forbid"`, `building_age` derived server-side from `year_built`.
 - **Reproducibility:** `requirements.lock.txt` alongside `requirements.txt`; `RANDOM_STATE=42` throughout.
-- **Tests:** `pytest -q` — 67 tests, all offline. CI runs on Python 3.11 and 3.12.
+- **Tests:** `pytest -q` — 68 tests, all offline, each run trains its own small model in a temp dir. CI runs on Python 3.11 and 3.12.
 
 ## Limitations
 

@@ -6,16 +6,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from zakkend import config
-from zakkend.data.synthetic import generate
-from zakkend.models.baseline import train
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _ensure_model_exists():
-    """Make sure a trained model is on disk before the API starts."""
-    if not config.MODEL_PATH.exists():
-        model = train(generate(n=2_000))
-        model.save()
 
 
 @pytest.fixture(scope="module")

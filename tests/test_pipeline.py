@@ -78,6 +78,21 @@ class TestBAGParser:
         df = _features_to_dataframe([feat, feat, feat])
         assert len(df) == 1
 
+    def test_row_order_independent_of_api_order(self):
+        """PDOK can return buildings in any order; the parsed frame must not change."""
+
+        def feat(bag_id, lon):
+            return {
+                "properties": {"identificatie": bag_id, "bouwjaar": 1950, "oppervlakte": 60},
+                "geometry": {"type": "Point", "coordinates": [lon, 52.02]},
+            }
+
+        feats = [feat("0003", 4.71), feat("0001", 4.72), feat("0002", 4.73)]
+        a = _features_to_dataframe(feats)
+        b = _features_to_dataframe(list(reversed(feats)))
+        assert list(a["identificatie"]) == ["0001", "0002", "0003"]
+        pd.testing.assert_frame_equal(a, b)
+
 
 # Soil classification tests
 

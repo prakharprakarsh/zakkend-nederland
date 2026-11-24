@@ -228,7 +228,13 @@ def _features_to_dataframe(features: list[dict]) -> pd.DataFrame:
 
     df = pd.DataFrame(records)
     if not df.empty:
-        df = df.drop_duplicates(subset=["identificatie"])
+        # Sort by BAG id: several simulated features are drawn from a seeded RNG
+        # in row order, so without this the dataset depends on PDOK's response order.
+        df = (
+            df.drop_duplicates(subset=["identificatie"])
+            .sort_values("identificatie")
+            .reset_index(drop=True)
+        )
         logger.info(
             f"Parsed {len(df)} unique buildings "
             f"(year range: {df['bouwjaar'].min()}–{df['bouwjaar'].max()})"
